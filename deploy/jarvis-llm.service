@@ -1,0 +1,19 @@
+[Unit]
+Description=Jarvis LLM connector (Gemini + ChatGPT MCP server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=jarvis-llm
+WorkingDirectory=/opt/jarvis-llm-connector
+EnvironmentFile=/etc/jarvis-llm/env
+ExecStart=/opt/jarvis-llm-connector/.venv/bin/python server.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
