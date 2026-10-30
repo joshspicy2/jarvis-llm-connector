@@ -1,0 +1,458 @@
+{
+ "name": "Jarvis Estimator",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/estimate",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Estimate Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-estimate"
+  },
+  {
+   "parameters": {
+    "jsCode": "const b = $('Estimate Webhook').first().json.body;\nconst body = (b && typeof b === 'object' && !Array.isArray(b)) ? b : null;\nlet error = null;\nif (!body) error = 'Body must be a JSON object.';\nelse if (!Array.isArray(body.items) || body.items.length === 0) error = 'items must be a non-empty array.';\nelse {\n  for (let i = 0; i < body.items.length; i++) {\n    const it = body.items[i];\n    if (!it || typeof it !== 'object' || Array.isArray(it) || typeof it.service !== 'string' || it.service.trim() === '') {\n      error = 'items[' + i + '].service must be a non-empty string.';\n      break;\n    }\n  }\n}\nif (error) return [{ json: { valid: false, error } }];\nreturn [{ json: {\n  valid: true,\n  job_name: typeof body.job_name === 'string' && body.job_name.trim() ? body.job_name.trim() : '(unnamed job)',\n  notes: typeof body.notes === 'string' ? body.notes : '',\n  items: body.items.map(it => ({ service: it.service, quantity: it.quantity === undefined ? null : it.quantity }))\n} }];\n"
+   },
+   "name": "Validate Request",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.valid }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Request Valid?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ status: 'error', error: $json.error }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond Bad Request",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    240
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "688aa0475933473da807974ddf90cd3e",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "simple": false,
+    "options": {}
+   },
+   "name": "Notion Estimate Rules",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    660,
+    0
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Port of estimator/estimate.py (same rules, same messages). Exact decimal math with BigInt.\nconst req = $('Validate Request').first().json;\nconst pText = v => (v && Array.isArray(v.title || v.rich_text)) ? (v.title || v.rich_text).map(t => t.plain_text).join('') : '';\nconst rules = [];\nfor (const it of $input.all()) {\n  const p = it.json.properties;\n  if (!p) continue;\n  rules.push({\n    id: it.json.id,\n    notes: pText(p['Notes']),\n    service: pText(p['Service']),\n    category: p['Category']?.select?.name ?? null,\n    base_rate: p['Base Rate']?.number ?? null,\n    unit: p['Unit']?.select?.name ?? null,\n    minimum_charge: p['Minimum Charge']?.number ?? null,\n    active: p['Active']?.checkbox === true\n  });\n}\nconst P10 = n => 10n ** BigInt(n);\nfunction toDec(v) {\n  if (v === null || v === undefined || typeof v === 'boolean') return null;\n  if (typeof v === 'number' && !Number.isFinite(v)) return null;\n  if (typeof v !== 'number' && typeof v !== 'string') return null;\n  const m = String(v).trim().match(/^\\+?(\\d+)(?:\\.(\\d*))?(?:[eE]([+-]?\\d+))?$|^\\+?\\.(\\d+)(?:[eE]([+-]?\\d+))?$/);\n  if (!m) return null;\n  const ip = m[1] !== undefined ? m[1] : '', fp = m[1] !== undefined ? (m[2] || '') : m[4];\n  const ex = parseInt((m[1] !== undefined ? m[3] : m[5]) || '0', 10);\n  let n = BigInt(ip + fp || '0'), s = fp.length - ex;\n  if (s < 0) { n *= P10(-s); s = 0; }\n  return { n, s };\n}\nconst align = (a, b) => { const s = Math.max(a.s, b.s); return [a.n * P10(s - a.s), b.n * P10(s - b.s), s]; };\nconst add = (a, b) => { const [x, y, s] = align(a, b); return { n: x + y, s }; };\nconst mul = (a, b) => ({ n: a.n * b.n, s: a.s + b.s });\nconst lt = (a, b) => { const [x, y] = align(a, b); return x < y; };\nconst gt = (a, b) => lt(b, a);\nfunction money(a) { // round half up to cents\n  if (a.s <= 2) return { n: a.n * P10(2 - a.s), s: 2 };\n  const d = P10(a.s - 2); let q = a.n / d;\n  if ((a.n % d) * 2n >= d) q += 1n;\n  return { n: q, s: 2 };\n}\nfunction fmtMoney(a) {\n  const m = money(a), t = m.n.toString().padStart(3, '0');\n  return t.slice(0, -2) + '.' + t.slice(-2);\n}\nfunction fmtNum(a) {\n  let t = a.n.toString(), s = a.s;\n  while (s > 0 && t.endsWith('0')) { t = t.slice(0, -1); s--; }\n  if (s === 0) return t;\n  t = t.padStart(s + 1, '0');\n  return t.slice(0, -s) + '.' + t.slice(-s);\n}\nconst key = n => String(n ?? '').split(/\\s+/).filter(Boolean).join(' ').toLowerCase();\nconst UNITS = { 'per sqft': 'Per Sqft', 'per room': 'Per Room', 'flat rate': 'Flat Rate', 'per hour': 'Per Hour' };\nconst CATS = { 'interior': 'Interior', 'exterior': 'Exterior', 'add-on': 'Add-On' };\nconst PRIMARY = new Set(['Interior', 'Exterior']);\n\nconst missing = [], warnings = [], lines = [], jl = [], ruleNotes = [];\nconst active = new Map(), inactive = new Set();\nfor (const r of rules) {\n  const k = key(r.service);\n  if (r.active === true) { if (!active.has(k)) active.set(k, []); active.get(k).push(r); }\n  else inactive.add(k);\n}\nlet primary = { n: 0n, s: 0 }, addon = { n: 0n, s: 0 }, hasPrimary = false, minimum = null;\n\nreq.items.forEach((item, idx) => {\n  const pos = idx + 1, service = item.service;\n  const label = \"'\" + service + \"' (item \" + pos + ')';\n  const k = key(service);\n  if (!k) { missing.push('Item ' + pos + ' has no service name; line excluded.'); return; }\n  const matches = active.get(k) || [];\n  if (!matches.length) {\n    missing.push(inactive.has(k)\n      ? 'Service ' + label + ' has only inactive rules; line excluded.'\n      : 'No active rule for service ' + label + '; line excluded.');\n    return;\n  }\n  if (matches.length > 1) { missing.push('Multiple active rules match service ' + label + '; cannot choose; line excluded.'); return; }\n  const rule = matches[0];\n  const unit = UNITS[String(rule.unit ?? '').trim().toLowerCase()];\n  if (!unit) { missing.push('Rule for ' + label + ' has unknown unit ' + JSON.stringify(rule.unit) + '; line excluded.'); return; }\n  const category = CATS[String(rule.category ?? '').trim().toLowerCase()];\n  if (!category) { missing.push('Rule for ' + label + ' has unknown category ' + JSON.stringify(rule.category) + '; line excluded.'); return; }\n  if (rule.base_rate === null || rule.base_rate === undefined) { missing.push('Rule for ' + label + ' has no base_rate; line excluded.'); return; }\n  const rate = toDec(rule.base_rate);\n  if (!rate) { missing.push('Rule for ' + label + ' has invalid base_rate ' + JSON.stringify(rule.base_rate) + '; line excluded.'); return; }\n  let qty;\n  if (unit === 'Flat Rate') {\n    if (item.quantity !== null && item.quantity !== undefined) warnings.push('Quantity for flat-rate service ' + label + ' ignored; treated as 1.');\n    qty = { n: 1n, s: 0 };\n  } else {\n    if (item.quantity === null || item.quantity === undefined) { missing.push('Quantity missing for ' + label + ' (' + unit + '); line excluded.'); return; }\n    qty = toDec(item.quantity);\n    if (!qty) { missing.push('Invalid quantity ' + JSON.stringify(item.quantity) + ' for ' + label + '; line excluded.'); return; }\n  }\n  let ruleMin = null;\n  if (PRIMARY.has(category) && rule.minimum_charge !== null && rule.minimum_charge !== undefined) {\n    ruleMin = toDec(rule.minimum_charge);\n    if (!ruleMin) { missing.push('Invalid minimum_charge ' + JSON.stringify(rule.minimum_charge) + ' for ' + label + '; line excluded.'); return; }\n  }\n  const amount = money(mul(rate, qty));\n  lines.push({ service: rule.service, unit, quantity: fmtNum(qty), rate: fmtMoney(rate), amount: fmtMoney(amount) });\n  const isPrim = PRIMARY.has(category);\n  const lm = isPrim && ruleMin ? money(ruleMin) : null;\n  const lApplied = !!(lm && lt(amount, lm));\n  jl.push({ service: rule.service, rule_id: rule.id, category, unit, base_rate: Number(fmtMoney(rate)), quantity: Number(fmtNum(qty)),\n    computed: Number(fmtMoney(amount)), minimum_charge: lm ? Number(fmtMoney(lm)) : 0, minimum_applied: lApplied,\n    line_total: Number(fmtMoney(lApplied ? lm : amount)) });\n  if (rule.notes && rule.notes.trim()) ruleNotes.push(rule.service + ': ' + rule.notes.trim());\n  if (PRIMARY.has(category)) {\n    hasPrimary = true;\n    primary = add(primary, amount);\n    if (ruleMin && (minimum === null || gt(ruleMin, minimum))) minimum = ruleMin;\n  } else addon = add(addon, amount);\n});\n\nif (!hasPrimary && addon.n > 0n) missing.push('Add-On requested with no main Interior/Exterior service.');\nconst minApplied = hasPrimary && minimum !== null && lt(primary, minimum);\nconst primaryTotal = minApplied ? minimum : primary;\nconst total = missing.length ? null : fmtMoney(add(money(primaryTotal), addon));\nconst estimate = {\n  job_name: req.job_name,\n  lines,\n  subtotal: fmtMoney(add(primary, addon)),\n  minimum_applied: !!minApplied,\n  minimum_charge: (hasPrimary && minimum !== null) ? fmtMoney(minimum) : null,\n  total,\n  missing,\n  warnings,\n  notes: req.notes\n};\nconst ej = {\n  status: missing.length ? 'needs_info' : 'draft',\n  client: req.job_name,\n  line_items: jl,\n  subtotal: missing.length ? null : Number(estimate.subtotal),\n  total: total === null ? null : Number(total),\n  assumptions: [],\n  missing_fields: missing,\n  rule_notes: ruleNotes,\n  needs_human: true\n};\nconst jsonText = JSON.stringify(ej);\nconst cut = (t, n) => t.length > n ? t.slice(0, n - 3) + '...' : t;\nlet draft = 'Estimate for ' + req.job_name + ' (DRAFT, not sent to client)\\n';\nfor (const l of lines) draft += '- ' + l.service + ': ' + l.quantity + ' x $' + l.rate + ' (' + l.unit + ') = $' + l.amount + '\\n';\nif (estimate.minimum_applied) draft += 'Minimum charge of $' + estimate.minimum_charge + ' applied to the main services.\\n';\ndraft += 'Subtotal: $' + estimate.subtotal + '\\nTOTAL: ' + (total === null ? 'not available' : '$' + total) + '\\n';\nif (warnings.length) draft += 'Warnings: ' + warnings.join(' ') + '\\n';\nif (req.notes) draft += 'Notes: ' + req.notes + '\\n';\n// Draft = readable text + marker + compact JSON (design 2.5). The Notion rich-text item limit is 2000 chars:\n// the readable part is truncated first, the JSON never is.\nconst marker = '\\n[estimate-json]\\n';\nconst room = 1990 - marker.length - jsonText.length;\nconst readable = room > 20 ? cut(draft.trimEnd(), room) : '';\nreturn [{ json: {\n  estimate,\n  missing,\n  draft: readable + marker + jsonText,\n  missing_notes: cut('Needs info: ' + missing.join(' | '), 1990)\n} }];\n"
+   },
+   "name": "Calculate Estimate",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c2",
+       "leftValue": "={{ $json.missing.length }}",
+       "rightValue": 0,
+       "operator": {
+        "type": "number",
+        "operation": "gt"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Anything Missing?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1100,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Estimator"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ $('Calculate Estimate').first().json.missing_notes }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Needs Info",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1320,
+    -120
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ status: 'needs_info', missing: $('Calculate Estimate').first().json.missing }) }}",
+    "options": {}
+   },
+   "name": "Respond Needs Info",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1540,
+    -120
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "a807f4c25dfe4ce388626726b7d99f6d",
+     "mode": "id"
+    },
+    "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Title|title",
+       "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Estimator"
+      },
+      {
+       "key": "Type|select",
+       "selectValue": "Estimate"
+      },
+      {
+       "key": "Draft|rich_text",
+       "text": "={{ $('Calculate Estimate').first().json.draft }}"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Awaiting Approval"
+      },
+      {
+       "key": "QA Result|select",
+       "selectValue": "Not checked"
+      },
+      {
+       "key": "Related Job|rich_text",
+       "text": "={{ $('Validate Request').first().json.job_name }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Create Approval",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1320,
+    120
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Estimator"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'Drafted estimate, total $' + $('Calculate Estimate').first().json.estimate.total + '. Awaiting Approval.' }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Drafted",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    120
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ status: 'drafted', estimate: $('Calculate Estimate').first().json.estimate }) }}",
+    "options": {}
+   },
+   "name": "Respond Drafted",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    120
+   ]
+  }
+ ],
+ "connections": {
+  "Estimate Webhook": {
+   "main": [
+    [
+     {
+      "node": "Validate Request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate Request": {
+   "main": [
+    [
+     {
+      "node": "Request Valid?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Request Valid?": {
+   "main": [
+    [
+     {
+      "node": "Notion Estimate Rules",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Bad Request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Estimate Rules": {
+   "main": [
+    [
+     {
+      "node": "Calculate Estimate",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Calculate Estimate": {
+   "main": [
+    [
+     {
+      "node": "Anything Missing?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Anything Missing?": {
+   "main": [
+    [
+     {
+      "node": "Log Needs Info",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Create Approval",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Needs Info": {
+   "main": [
+    [
+     {
+      "node": "Respond Needs Info",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create Approval": {
+   "main": [
+    [
+     {
+      "node": "Log Drafted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Drafted": {
+   "main": [
+    [
+     {
+      "node": "Respond Drafted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

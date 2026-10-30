@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis — High Tide Ops</title>
+<style>
+:root{--bg:#02080c;--panel:#04141b;--line:#0b4a5a;--text:#bff3ff;--mute:#4d8a99;--accent:#00d4ff;--amber:#ffb340;--ok:#00e5a0;--warn:#ffb340;--bad:#ff4d4d;
+ --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
+body.war{--bg:#0a0204;--panel:#160509;--line:#5a0b1a;--text:#ffd0d0;--mute:#995060;--accent:#ff3b3b}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;min-width:1200px;min-height:700px}
+body{background:var(--bg);color:var(--text);font:13px/1.45 var(--mono);transition:background .6s}
+#sea{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.35}
+.app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 24px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 85%,transparent)}
+h1{margin:0;font-size:16px;letter-spacing:.3em;color:var(--accent)}
+h1 small{display:block;font-size:10px;letter-spacing:.15em;color:var(--mute);font-weight:400;text-transform:uppercase}
+.stat{text-align:center;font-size:10px;letter-spacing:.15em;color:var(--mute);text-transform:uppercase}
+.stat b{display:block;font-size:13px;color:var(--accent);letter-spacing:.1em}
+.hdr-mid{display:flex;gap:32px}
+.badge{padding:3px 10px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
+.badge.live{color:var(--ok);border-color:var(--ok)}.badge.sample{color:var(--warn);border-color:var(--warn)}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,26vw) 1fr minmax(300px,26vw);gap:24px;padding:24px 24px 96px}
+.col{display:flex;flex-direction:column;gap:20px;min-width:0;min-height:0}
+.col>.panel{flex:0 0 auto}.col>.panel.grow{flex:1 1 0;min-height:0;overflow:auto}
+.panel{position:relative;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 85%,transparent);padding:14px}
+.panel::before,.panel::after{content:"";position:absolute;width:10px;height:10px;border:2px solid var(--accent)}
+.panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+.panel h2{margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.25em;font-weight:400;color:var(--text);display:flex;justify-content:space-between;align-items:center}
+.panel h2 i{font-style:normal;color:var(--mute);letter-spacing:.1em;font-size:10px}
+.tag-sample{font-size:9px;color:var(--warn);border:1px dashed var(--warn);padding:1px 5px;letter-spacing:.1em}
+.stage{margin-bottom:10px}.stage h3{margin:0 0 4px;font-size:11px;font-weight:400;letter-spacing:.1em;color:var(--mute);display:flex;justify-content:space-between;text-transform:uppercase}
+.bar{height:3px;background:var(--line);margin-bottom:4px}.bar>div{height:100%;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.card{border:1px solid var(--line);padding:4px 8px;margin-top:4px;font-size:11px}.card b{display:block;color:var(--text);font-weight:500}.card span{color:var(--mute)}
+table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:400;letter-spacing:.1em;text-transform:uppercase;font-size:10px}
+.empty{color:var(--mute);padding:12px;text-align:center;border:1px dashed var(--line);font-size:11px}
+.agent{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.agent:last-child{border:0}.agent b{letter-spacing:.1em;text-transform:uppercase;font-size:12px}.agent p{margin:0;color:var(--mute);font-size:10px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--mute)}
+.active .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}.waiting .dot{background:var(--amber)}.error .dot{background:var(--bad)}
+.st{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
+.log{font-size:11px;overflow:auto;min-height:0}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
+.war-btn{width:100%;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:none;border:1px solid var(--line);color:var(--text);font:inherit;letter-spacing:.2em;padding:10px;text-transform:uppercase}
+.war-btn.on{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--accent) inset}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#reactor{height:min(62vh,100%);max-width:100%;aspect-ratio:1;overflow:visible}
+.ring{fill:none;stroke:var(--accent);stroke-opacity:.5}
+.spin{transform-origin:200px 200px;animation:spin 24s linear infinite}.spin2{animation-duration:40s;animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.node text{font:9px var(--mono);fill:var(--text);letter-spacing:.1em;text-anchor:middle}
+.node circle{fill:var(--bg);stroke:var(--mute);stroke-width:1.5}
+.node.active circle{stroke:var(--ok);fill:color-mix(in srgb,var(--ok) 30%,var(--bg))}.node.waiting circle{stroke:var(--amber)}.node.error circle{stroke:var(--bad)}
+#core1{font:bold 13px var(--mono);fill:var(--accent);text-anchor:middle;letter-spacing:.1em}
+.wave{display:flex;gap:3px;align-items:center;height:30px}.wave i{width:3px;background:var(--accent);animation:w 1.1s ease-in-out infinite}
+@keyframes w{50%{height:100%}}
+.chatbar{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:12px 16px}
+.chatlog{max-width:640px;margin:0 auto 6px;max-height:110px;overflow:auto;font-size:11px;background:color-mix(in srgb,var(--bg) 80%,transparent)}
+.chatlog .me{color:var(--accent)}.chatlog .jv{color:var(--amber)}
+.chatbar form{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:5px 6px;background:var(--panel)}
+.orb{width:28px;height:28px;border-radius:50%;flex:none;background:radial-gradient(circle at 35% 30%,#ffe2a8,var(--amber) 55%,#a35a00);box-shadow:0 0 12px var(--amber);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 24px var(--amber)}}
+.chatbar input{flex:1;background:none;border:0;color:var(--text);font:inherit;font-size:13px;letter-spacing:.1em;outline:none;min-width:0;text-transform:uppercase}
+.chatbar input::placeholder{color:var(--mute)}
+.chatbar button{background:none;border:1px solid var(--accent);color:var(--accent);border-radius:99px;padding:6px 14px;font:inherit;letter-spacing:.15em;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="sea"></canvas>
+<div class="app">
+  <header>
+    <h1>JARVIS<small>High Tide Ops · just a rather very intelligent system</small></h1>
+    <div class="hdr-mid">
+      <div class="stat">System status<b id="sysstat">OPTIMAL</b></div>
+      <div class="stat">Local time<b id="clock">--:--:--</b></div>
+    </div>
+    <span id="conn" class="badge sample">sample data</span>
+  </header>
+  <div class="main">
+    <div class="col">
+      <section class="panel grow"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2><div id="pipeline"></div></section>
+      <section class="panel"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
+    </div>
+    <div class="col center">
+      <svg id="reactor" viewBox="-40 -10 480 420" aria-label="Agent reactor">
+        <g class="spin"><circle class="ring" cx="200" cy="200" r="190" stroke-dasharray="4 6"/></g>
+        <circle class="ring" cx="200" cy="200" r="150"/>
+        <g class="spin spin2"><circle class="ring" cx="200" cy="200" r="105" stroke-dasharray="30 8"/></g>
+        <circle cx="200" cy="200" r="56" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        <text id="core1" x="200" y="196">CORE</text><text id="core2" class="core" x="200" y="212" style="font:bold 11px var(--mono);fill:var(--accent);text-anchor:middle;letter-spacing:.1em">ACTIVE</text>
+        <g id="nodes"></g>
+      </svg>
+      <div class="wave" id="wave"></div>
+    </div>
+    <div class="col">
+      <section class="panel"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
+      <section class="panel"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
+        <button class="war-btn" id="war"><span id="warLabel">War Mode: off</span><span>⏻</span></button>
+        <div style="color:var(--mute);font-size:10px;margin-top:6px">Stored in Notion System Flags via n8n.</div></section>
+      <section class="panel grow"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log"></div></section>
+    </div>
+  </div>
+</div>
+<div class="chatbar">
+  <div class="chatlog" id="chatlog"></div>
+  <form id="chatform"><div class="orb"></div><input id="chatin" placeholder="Awaiting command…" autocomplete="off"><button>SEND</button></form>
+</div>
+
+<script src="config.js"></script>
+<script>
+const C = window.JARVIS_CONFIG;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---- SAMPLE DATA (fallback only; clearly tagged in the UI) ----
+const SAMPLE = {
+  pipeline: { stages: [
+    { name:"Booked", cards:[{title:"Sample: Dana R.", sub:"Interior Cleaning · 2026-11-03"}] },
+    { name:"In Progress", cards:[{title:"Sample: Lee Family", sub:"Interior Cleaning"}] },
+    { name:"Awaiting Invoice", cards:[{title:"Sample: M. Ortiz", sub:"Interior Cleaning"}] },
+    { name:"Flagged", cards:[] },
+    { name:"Paid", cards:[] } ] },
+  agents: [
+    {name:"Conductor",status:"active",detail:"Sequencing handoffs (sample)"},
+    {name:"Router",status:"active",detail:"Classifying inbound (sample)"},
+    {name:"Estimator",status:"waiting",detail:"Needs pricing inputs (sample)"},
+    {name:"QA",status:"idle",detail:"—"},
+    {name:"Marketer",status:"idle",detail:"Phase 2"},
+    {name:"Shield/Ops",status:"active",detail:"Watching flags & budget (sample)"} ],
+  rules: [],  // intentionally empty: real rows live in Notion Estimate Rules DB
+  warMode: { enabled:false },
+  log: [ {t:"--:--:--", text:"Sample entry: Router classified inbound lead"}, {t:"--:--:--", text:"Sample entry: Estimate draft awaiting approval"} ],
+};
+const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
+const state = { live:{}, war:false, pending:false, warKnown:false, warSeq:0 };
+
+async function call(key, body, timeoutMs){
+  const ep = C.ENDPOINTS[key];
+  if (C.FORCE_SAMPLE) throw new Error("sample forced");
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), timeoutMs || C.TIMEOUT_MS);
+  try{
+    const r = await fetch(C.N8N_BASE + ep.path, {
+      method: ep.method, signal: ctl.signal,
+      headers: body ? {"Content-Type":"application/json"} : undefined,
+      body: body ? JSON.stringify(body) : undefined });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+async function load(key, sample){
+  try { const d = await call(key); state.live[key]=true; return d; }
+  catch(e){ state.live[key]=false; return sample; }
+}
+function markSample(){
+  document.querySelectorAll(".tag-sample").forEach(el=> el.hidden = !!state.live[el.dataset.for]);
+  const any = Object.values(state.live).some(Boolean), all = Object.values(state.live).every(Boolean);
+  const c = $("conn"); c.className = "badge " + (all ? "live":"sample");
+  c.textContent = all ? "live · n8n" : any ? "partial · some sample data" : "sample data (n8n unreachable)";
+}
+
+function renderPipeline(d){
+  const st=Array.isArray(d&&d.stages)?d.stages:[], max=Math.max(1,...st.map(s=>(s.cards||[]).length));
+  $("pipeline").innerHTML = st.map(s=>{const n=(s.cards||[]).length;return `<div class="stage"><h3>${esc(s.name)}<span>${n}</span></h3><div class="bar"><div style="width:${n/max*100}%"></div></div>${
+    (s.cards||[]).map(c=>`<div class="card"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span></div>`).join("")}</div>`}).join("");
+}
+function renderAgents(list){
+  const by = Object.fromEntries((list||[]).map(a=>[a.name,a]));
+  const rows = AGENT_ORDER.map(n=>({n, a: by[n]||{status:"idle",detail:"no data"}}));
+  $("agents").innerHTML = rows.map(({n,a})=>`<div class="agent ${esc(a.status)}"><div><b><span class="dot"></span>${n}</b><p>${esc(a.detail)}</p></div><span class="st">${esc(a.status)}</span></div>`).join("");
+  const N = rows.length;
+  $("nodes").innerHTML = rows.map(({n,a},i)=>{const ang=(i/N)*Math.PI*2-Math.PI/2,c=Math.cos(ang),s=Math.sin(ang),x=200+150*c,y=200+150*s,lx=200+188*c,ly=200+188*s+3;
+    return `<g class="node ${esc(a.status)}"><circle cx="${x}" cy="${y}" r="13"/><text x="${x}" y="${y+3}" style="font-size:8px">${esc(n.slice(0,3).toUpperCase())}</text><text x="${lx}" y="${ly}" style="fill:var(--mute);font-size:8px;text-anchor:${c>0.3?"start":c<-0.3?"end":"middle"}">${esc(n.toUpperCase())}</text></g>`}).join("");
+}
+function renderLog(rows){ $("log").innerHTML=(Array.isArray(rows)?rows:[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); $("log").scrollTop=1e9; }
+function renderRules(rows){
+  if(!Array.isArray(rows)) rows=[];
+  if( !rows.length){
+    $("rules").innerHTML = `<div class="empty">No estimate rules yet. Add rows in the Notion Estimate Rules database and they will appear here.</div>`; return; }
+  $("rules").innerHTML = `<table><thead><tr><th>Service</th><th>Category</th><th>Base</th><th>Unit</th><th>Min</th><th>Notes</th></tr></thead><tbody>${
+    rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.category)}</td><td>${r.base!==""?"$"+esc(r.base):""}</td><td>${esc(r.unit)}</td><td>${r.min!==""?"$"+esc(r.min):""}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
+}
+function setWar(on){
+  state.war = on; document.body.classList.toggle("war", on);
+  $("war").classList.toggle("on", on); $("warLabel").textContent = "War Mode: " + (on?"ON":"off");
+  $("core1").textContent = on?"WAR":"CORE"; $("core2").textContent = on?"MODE":"ACTIVE"; $("sysstat").textContent = on?"ALERT":"OPTIMAL";
+}
+
+async function refresh(){
+  const seq = state.warSeq;
+  const [p,a,r,w,lg] = await Promise.all([
+    load("pipeline",SAMPLE.pipeline), load("agents",SAMPLE.agents),
+    load("rules",SAMPLE.rules), load("warMode",null), load("log",SAMPLE.log)]);
+  renderPipeline(p); renderAgents(a); renderRules(r); renderLog(lg);
+  if(w && typeof w.enabled==="boolean"){ if(!state.pending && seq===state.warSeq){ state.warKnown=true; setWar(w.enabled); } }
+  else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; }
+  $("war").disabled = !state.warKnown || state.pending;
+  markSample();
+}
+
+$("war").addEventListener("click", async ()=>{
+  if(state.pending || !state.warKnown) return;
+  const want = !state.war; state.pending = true; state.warSeq++; $("war").disabled = true; setWar(want);
+  try { const r = await call("setWarMode", {enabled:want}); if(r && typeof r.enabled==="boolean") setWar(r.enabled); }
+  catch(err){ setWar(!want); log("jv","Could not save War Mode (n8n unreachable) — reverted. Check the real state before retrying."); }
+  finally { state.pending = false; state.warSeq++; $("war").disabled = false; }
+});
+
+function log(who, text){
+  const d = document.createElement("div"); d.className=who; d.textContent=(who==="me"?"You: ":"Jarvis: ")+text;
+  $("chatlog").appendChild(d); $("chatlog").scrollTop = 1e9;
+}
+$("chatform").addEventListener("submit", async e=>{
+  e.preventDefault(); const q = $("chatin").value.trim(); if(!q) return;
+  $("chatin").value=""; log("me",q);
+  try { const r = await call("chat",{message:q}, C.CHAT_TIMEOUT_MS); log("jv", r.reply || JSON.stringify(r)); }
+  catch(err){ log("jv","No reply received (n8n unreachable or slow). The message may still have been processed, so check before resending."); }
+});
+
+// ---- Sea background: layered shoreline waves; storm + foam in War Mode ----
+const cv = $("sea"), g = cv.getContext("2d"); let W,H,foam=[],t=0,storm=0;
+function size(){ W=cv.width=innerWidth; H=cv.height=innerHeight; } addEventListener("resize",size); size();
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function frame(){
+  t += reduce ? 0 : 0.012; storm += ((state.war?1:0)-storm)*0.03;
+  g.clearRect(0,0,W,H);
+  const layers = 5;
+  for(let l=0;l<layers;l++){
+    const base = H*(0.72+l*0.045), amp = (10+l*5)*(1+storm*1.8), sp = (1+l*0.35)*(1+storm);
+    const r = Math.round(20+l*8 + storm*(30-l*4)), gr = Math.round(70+l*14 - storm*50), b = Math.round(100+l*14 - storm*55);
+    g.beginPath(); g.moveTo(0,H);
+    for(let x=0;x<=W;x+=8) g.lineTo(x, base + Math.sin(x*0.008+t*sp+l)*amp + Math.sin(x*0.02-t*sp*1.3)*amp*0.35);
+    g.lineTo(W,H); g.closePath(); g.fillStyle=`rgba(${r},${gr},${b},${0.22+l*0.07})`; g.fill();
+  }
+  if(storm>0.3 && !reduce){
+    if(foam.length<140 && Math.random()<0.9) foam.push({x:Math.random()*W,y:H*0.75+Math.random()*H*0.1,vx:(Math.random()-.5)*2,vy:-Math.random()*2.5-0.5,life:1});
+    foam = foam.filter(p=>p.life>0);
+    for(const p of foam){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life-=0.015;
+      g.fillStyle=`rgba(255,255,255,${Math.max(p.life,0)*storm})`; g.beginPath(); g.arc(p.x,p.y,1.5+p.life*1.5,0,6.3); g.fill(); }
+  }
+  requestAnimationFrame(frame);
+}
+frame();
+
+$("wave").innerHTML = Array.from({length:14},(_,i)=>`<i style="animation-delay:${(i*0.09).toFixed(2)}s;height:${8+(i*7)%22}px"></i>`).join("");
+setInterval(()=>{ $("clock").textContent = new Date().toLocaleTimeString([], {hour12:false}); },1000);
+refresh(); setInterval(()=>{ if(!document.hidden) refresh(); }, C.POLL_MS);
+</script>
+</body>
+</html>
