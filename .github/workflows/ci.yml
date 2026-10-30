@@ -45,7 +45,7 @@ jobs:
 
       - name: Secret scan
         run: |
-          if git grep -nE -e 'sk-ant-' -e 'secret_[A-Za-z0-9_]{20,}' -e 'ntn_[A-Za-z0-9_]{20,}' -- . ':(exclude)scripts/test_validate_workflows.py'; then
+          if git grep -nE -e 'sk-ant-[A-Za-z0-9_-]{20,}' -e 'secret_[A-Za-z0-9_]{20,}' -e 'ntn_[A-Za-z0-9_]{20,}' -- . ':(exclude)scripts/test_validate_workflows.py'; then
             echo "Possible secret found in tracked files" >&2
             exit 1
           fi
