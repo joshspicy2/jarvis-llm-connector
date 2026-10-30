@@ -39,7 +39,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--mute)}
 .active .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}.waiting .dot{background:var(--amber)}.error .dot{background:var(--bad)}
 .st{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
-.log{font-size:11px}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
+.log{font-size:11px;overflow:auto;min-height:0}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
 .war-btn{width:100%;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:none;border:1px solid var(--line);color:var(--text);font:inherit;letter-spacing:.2em;padding:10px;text-transform:uppercase}
 .war-btn.on{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--accent) inset}
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
@@ -131,12 +131,12 @@ const SAMPLE = {
   log: [ {t:"--:--:--", text:"Sample entry: Router classified inbound lead"}, {t:"--:--:--", text:"Sample entry: Estimate draft awaiting approval"} ],
 };
 const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
-const state = { live:{}, war:false, pending:false };
+const state = { live:{}, war:false, pending:false, warKnown:false, warSeq:0 };
 
-async function call(key, body){
+async function call(key, body, timeoutMs){
   const ep = C.ENDPOINTS[key];
   if (C.FORCE_SAMPLE) throw new Error("sample forced");
-  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), C.TIMEOUT_MS);
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), timeoutMs || C.TIMEOUT_MS);
   try{
     const r = await fetch(C.N8N_BASE + ep.path, {
       method: ep.method, signal: ctl.signal,
@@ -158,7 +158,7 @@ function markSample(){
 }
 
 function renderPipeline(d){
-  const st=d.stages||[], max=Math.max(1,...st.map(s=>(s.cards||[]).length));
+  const st=Array.isArray(d&&d.stages)?d.stages:[], max=Math.max(1,...st.map(s=>(s.cards||[]).length));
   $("pipeline").innerHTML = st.map(s=>{const n=(s.cards||[]).length;return `<div class="stage"><h3>${esc(s.name)}<span>${n}</span></h3><div class="bar"><div style="width:${n/max*100}%"></div></div>${
     (s.cards||[]).map(c=>`<div class="card"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span></div>`).join("")}</div>`}).join("");
 }
@@ -170,9 +170,10 @@ function renderAgents(list){
   $("nodes").innerHTML = rows.map(({n,a},i)=>{const ang=(i/N)*Math.PI*2-Math.PI/2,c=Math.cos(ang),s=Math.sin(ang),x=200+150*c,y=200+150*s,lx=200+188*c,ly=200+188*s+3;
     return `<g class="node ${esc(a.status)}"><circle cx="${x}" cy="${y}" r="13"/><text x="${x}" y="${y+3}" style="font-size:8px">${esc(n.slice(0,3).toUpperCase())}</text><text x="${lx}" y="${ly}" style="fill:var(--mute);font-size:8px;text-anchor:${c>0.3?"start":c<-0.3?"end":"middle"}">${esc(n.toUpperCase())}</text></g>`}).join("");
 }
-function renderLog(rows){ $("log").innerHTML=(rows||[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); }
+function renderLog(rows){ $("log").innerHTML=(Array.isArray(rows)?rows:[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); $("log").scrollTop=1e9; }
 function renderRules(rows){
-  if(!rows || !rows.length){
+  if(!Array.isArray(rows)) rows=[];
+  if( !rows.length){
     $("rules").innerHTML = `<div class="empty">No estimate rules yet. Add rows in the Notion Estimate Rules database and they will appear here.</div>`; return; }
   $("rules").innerHTML = `<table><thead><tr><th>Service</th><th>Category</th><th>Base</th><th>Unit</th><th>Min</th><th>Notes</th></tr></thead><tbody>${
     rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.category)}</td><td>${r.base!==""?"$"+esc(r.base):""}</td><td>${esc(r.unit)}</td><td>${r.min!==""?"$"+esc(r.min):""}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
@@ -184,19 +185,23 @@ function setWar(on){
 }
 
 async function refresh(){
+  const seq = state.warSeq;
   const [p,a,r,w,lg] = await Promise.all([
     load("pipeline",SAMPLE.pipeline), load("agents",SAMPLE.agents),
-    load("rules",SAMPLE.rules), load("warMode",SAMPLE.warMode), load("log",SAMPLE.log)]);
+    load("rules",SAMPLE.rules), load("warMode",null), load("log",SAMPLE.log)]);
   renderPipeline(p); renderAgents(a); renderRules(r); renderLog(lg);
-  if(!state.pending) setWar(!!w.enabled);
+  if(w && typeof w.enabled==="boolean"){ if(!state.pending && seq===state.warSeq){ state.warKnown=true; setWar(w.enabled); } }
+  else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; }
+  $("war").disabled = !state.warKnown || state.pending;
   markSample();
 }
 
 $("war").addEventListener("click", async ()=>{
-  const want = !state.war; state.pending = true; setWar(want);
-  try { await call("setWarMode", {enabled:want}); }
-  catch(err){ setWar(!want); log("jv","Could not save War Mode (n8n unreachable) — reverted."); }
-  state.pending = false;
+  if(state.pending || !state.warKnown) return;
+  const want = !state.war; state.pending = true; state.warSeq++; $("war").disabled = true; setWar(want);
+  try { const r = await call("setWarMode", {enabled:want}); if(r && typeof r.enabled==="boolean") setWar(r.enabled); }
+  catch(err){ setWar(!want); log("jv","Could not save War Mode (n8n unreachable) — reverted. Check the real state before retrying."); }
+  finally { state.pending = false; state.warSeq++; $("war").disabled = false; }
 });
 
 function log(who, text){
@@ -206,8 +211,8 @@ function log(who, text){
 $("chatform").addEventListener("submit", async e=>{
   e.preventDefault(); const q = $("chatin").value.trim(); if(!q) return;
   $("chatin").value=""; log("me",q);
-  try { const r = await call("chat",{message:q}); log("jv", r.reply || JSON.stringify(r)); }
-  catch(err){ log("jv","(offline) n8n chat webhook unreachable, so nothing was sent to the agents."); }
+  try { const r = await call("chat",{message:q}, C.CHAT_TIMEOUT_MS); log("jv", r.reply || JSON.stringify(r)); }
+  catch(err){ log("jv","No reply received (n8n unreachable or slow). The message may still have been processed, so check before resending."); }
 });
 
 // ---- Sea background: layered shoreline waves; storm + foam in War Mode ----
@@ -237,7 +242,7 @@ frame();
 
 $("wave").innerHTML = Array.from({length:14},(_,i)=>`<i style="animation-delay:${(i*0.09).toFixed(2)}s;height:${8+(i*7)%22}px"></i>`).join("");
 setInterval(()=>{ $("clock").textContent = new Date().toLocaleTimeString([], {hour12:false}); },1000);
-refresh(); setInterval(refresh, C.POLL_MS);
+refresh(); setInterval(()=>{ if(!document.hidden) refresh(); }, C.POLL_MS);
 </script>
 </body>
 </html>

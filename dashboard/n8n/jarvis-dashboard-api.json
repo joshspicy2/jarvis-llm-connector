@@ -7,7 +7,7 @@
     "path": "jarvis/pipeline",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "Pipeline GET",
@@ -29,7 +29,8 @@
      "mode": "id"
     },
     "returnAll": true,
-    "options": {}
+    "options": {},
+    "simple": false
    },
    "name": "Notion Pipeline",
    "type": "n8n-nodes-base.notion",
@@ -78,7 +79,7 @@
     "path": "jarvis/estimate-rules",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "Rules GET",
@@ -100,7 +101,8 @@
      "mode": "id"
     },
     "returnAll": true,
-    "options": {}
+    "options": {},
+    "simple": false
    },
    "name": "Notion Rules",
    "type": "n8n-nodes-base.notion",
@@ -149,7 +151,7 @@
     "path": "jarvis/war-mode",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "War GET",
@@ -171,7 +173,8 @@
      "mode": "id"
     },
     "returnAll": true,
-    "options": {}
+    "options": {},
+    "simple": false
    },
    "name": "Notion Flags (read)",
    "type": "n8n-nodes-base.notion",
@@ -190,7 +193,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst row = $input.all().find(i=>i.json.id && /war/i.test(titleOf(i.json)));\nreturn [{ json: { body: { enabled: !!(row && props(row.json)[\"Value\"]?.checkbox) } } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst row = $input.all().find(i=>i.json.id && /^war mode$/i.test(titleOf(i.json).trim()));\nreturn [{ json: { body: { enabled: !!(row && props(row.json)[\"Value\"]?.checkbox) } } }];"
    },
    "name": "Shape War",
    "type": "n8n-nodes-base.code",
@@ -220,7 +223,7 @@
     "path": "jarvis/war-mode",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "War POST",
@@ -242,7 +245,8 @@
      "mode": "id"
     },
     "returnAll": true,
-    "options": {}
+    "options": {},
+    "simple": false
    },
    "name": "Notion Flags (find)",
    "type": "n8n-nodes-base.notion",
@@ -261,7 +265,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst want = $('War POST').first().json.body.enabled === true;\nconst row = $input.all().find(i=>i.json.id && /war/i.test(titleOf(i.json)));\nif (!row) throw new Error(\"No War Mode row found in System Flags\");\nreturn [{ json: { pageId: row.json.id, enabled: want } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst b = $('War POST').first().json.body;\nif (!b || typeof b.enabled !== 'boolean') throw new Error('Bad request: body.enabled must be true or false');\nconst want = b.enabled;\nconst row = $input.all().find(i=>i.json.id && /^war mode$/i.test(titleOf(i.json).trim()));\nif (!row) throw new Error(\"No War Mode row found in System Flags\");\nreturn [{ json: { pageId: row.json.id, enabled: want } }];"
    },
    "name": "Pick War Row",
    "type": "n8n-nodes-base.code",
@@ -336,7 +340,7 @@
     "path": "jarvis/activity-log",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "Log GET",
@@ -358,7 +362,8 @@
      "mode": "id"
     },
     "returnAll": true,
-    "options": {}
+    "options": {},
+    "simple": false
    },
    "name": "Notion Log",
    "type": "n8n-nodes-base.notion",
@@ -377,7 +382,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst ts = i => props(i.json)[\"Timestamp\"]?.date?.start || i.json.created_time;\nconst rows = $input.all().filter(i=>i.json.id).sort((a,b)=>new Date(ts(a))-new Date(ts(b))).slice(-25)\n .map(i=>({ t: new Date(ts(i)).toLocaleTimeString(\"en-US\",{hour12:false,timeZone:\"America/New_York\"}),\n   text: [find(i.json,/^agent$/i), titleOf(i.json), find(i.json,/^output notes$/i)].filter(Boolean).join(\": \") }));\nreturn [{ json: { body: rows } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst ts = i => props(i.json)[\"Timestamp\"]?.date?.start || i.json.created_time;\nconst rows = $input.all().filter(i=>i.json.id).sort((a,b)=>new Date(ts(a))-new Date(ts(b))).slice(-25)\n .map(i=>({ t: new Date(ts(i)).toLocaleTimeString(\"en-US\",{hourCycle:\"h23\",timeZone:\"America/New_York\"}),\n   text: [find(i.json,/^agent$/i), titleOf(i.json), find(i.json,/^output notes$/i)].filter(Boolean).join(\": \") }));\nreturn [{ json: { body: rows } }];"
    },
    "name": "Shape Log",
    "type": "n8n-nodes-base.code",
@@ -407,7 +412,7 @@
     "path": "jarvis/agents",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "Agents GET",
@@ -429,7 +434,8 @@
      "mode": "id"
     },
     "returnAll": true,
-    "options": {}
+    "options": {},
+    "simple": false
    },
    "name": "Notion Log (agents)",
    "type": "n8n-nodes-base.notion",
@@ -478,7 +484,7 @@
     "path": "jarvis/chat",
     "responseMode": "responseNode",
     "options": {
-     "allowedOrigins": "*"
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
     }
    },
    "name": "Chat POST",
@@ -762,6 +768,7 @@
   }
  },
  "settings": {
-  "executionOrder": "v1"
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
  }
 }

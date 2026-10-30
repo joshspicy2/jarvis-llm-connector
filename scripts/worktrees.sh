@@ -4,9 +4,10 @@
 #   scripts/worktrees.sh task <track> <name>  new task worktree branched from that track
 #   scripts/worktrees.sh list | done <track> <name>
 set -euo pipefail
-ROOT="$(git rev-parse --show-toplevel)"
+ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 WT="${JARVIS_WORKTREES:-$ROOT/../jarvis-worktrees}"
 BASE="${JARVIS_BASE:-main}"
+git -C "$ROOT" rev-parse --verify -q "$BASE" >/dev/null || { echo "base branch $BASE not found (set JARVIS_BASE)"; exit 1; }
 cmd="${1:-list}"; shift || true
 case "$cmd" in
   init)
@@ -17,6 +18,7 @@ case "$cmd" in
     done ;;
   task)
     t="${1:?track: business|dev}"; n="${2:?task name}"
+    case "$t" in business|dev) ;; *) echo "track must be business or dev"; exit 1 ;; esac
     [ -d "$WT/$t" ] || { echo "run init first"; exit 1; }
     git -C "$ROOT" worktree add -b "$t/$n" "$WT/tasks/$t-$n" "track/$t"
     echo "ready: $WT/tasks/$t-$n  (branch $t/$n)" ;;

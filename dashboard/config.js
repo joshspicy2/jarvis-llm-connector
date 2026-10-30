@@ -12,8 +12,9 @@ window.JARVIS_CONFIG = {
     log:       { method: "GET",  path: "/jarvis/activity-log" },
     chat:      { method: "POST", path: "/jarvis/chat" },
   },
-  POLL_MS: 15000,
+  POLL_MS: 30000,
   TIMEOUT_MS: 6000,
+  CHAT_TIMEOUT_MS: 45000,
   // Set true to skip network calls and always show sample data.
   FORCE_SAMPLE: false,
 };

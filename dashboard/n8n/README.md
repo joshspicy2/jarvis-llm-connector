@@ -12,7 +12,7 @@
    n8n Notion integration.
 4. War Mode writes the `Value` checkbox on the System Flags row whose `Flag` contains "War". That row must exist.
 5. Activate the workflow. Test: `curl https://ops.hightidewash.net/webhook/jarvis/war-mode`.
-6. Set the Webhook nodes' **Allowed Origins** from `*` to your Cloudflare Pages domain.
+6. Replace `https://REPLACE_WITH_DASHBOARD_ORIGIN` in every Webhook node's **Allowed Origins** with your dashboard origin (committed as a placeholder on purpose, never `*`).
 
 ## Protecting the endpoints (do before real data goes in)
 The page is public static code and the browser calls n8n directly, so a token in the page would be visible.
@@ -21,6 +21,6 @@ Pick one:
 - Caddy `basicauth` on `/webhook/jarvis/*` plus browser sign-in.
 
 ## Status
-- Agent status comes from each agent's latest Activity Log row (Thinking/Working = active, Error = error, otherwise idle). Integrator has no Agent option in the log yet, so it shows idle.
+- Agent status comes from each agent's latest Activity Log row (Thinking/Working = active, Error = error, otherwise idle). Old log names map to the new ones (Estimate→Estimator, Content→Marketer, Integrator→Conductor).
 - `/jarvis/chat` is a stub until the Router agent is wired in.
 - Untested against live Notion (no access from the cloud). Check the first execution in n8n and adjust property names.
