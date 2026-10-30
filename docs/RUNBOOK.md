@@ -16,8 +16,8 @@ Files this runbook depends on. Some are written by other agents and may not exis
    (read, update, insert content). Copy the token into n8n only (step 4), nowhere else.
 2. **Share the databases** with that integration (page menu -> Connections -> add): Pipeline, Estimate Rules,
    System Flags, Agent Activity Log, plus Clients/Invoices if the workflows use them.
-3. **Create the Approvals database** (a proposal in the schema doc, not yet in Notion) exactly as `docs/NOTION-SCHEMA.md` says (property names and select options
-   must match, or the Notion nodes fail). Only a human moves Status off *Awaiting Approval*; agents never set Approved.
+3. **Approvals database**: already created in Notion exactly as `docs/NOTION-SCHEMA.md` says (property names and select options
+   must match, or the Notion nodes fail; do not rename them). Only a human moves Status off *Awaiting Approval*; agents never set Approved.
    Share Approvals with the integration too.
 4. **Create credentials in the n8n UI** (Credentials -> New): Notion API (the token from step 1) and Anthropic API
    (credential type `anthropicApi`, needed by Router and the agent workflows). Nothing goes in JSON files.
