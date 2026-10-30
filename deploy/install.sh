@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# One-shot installer for the Oracle Ubuntu VM. Run as a user with sudo:
-#   curl -fsSL https://raw.githubusercontent.com/joshspicy2/jarvis-llm-connector/main/deploy/install.sh | bash
-# (repo is private? clone it first and run: bash deploy/install.sh)
+# One-shot installer for the Oracle Ubuntu VM. Clone the repo, then run as a user with sudo:
+#   git clone https://github.com/joshspicy2/jarvis-llm-connector && bash jarvis-llm-connector/deploy/install.sh
+# (before the PR is merged add: -b claude/llm-connector to the clone)
 # Prompts for the Gemini key (and optionally an OpenAI key); nothing is written to the repo.
 set -euo pipefail
 
@@ -15,7 +15,9 @@ read -rsp "OpenAI API key (press Enter to skip for now): " OPENAI_KEY </dev/tty;
 
 sudo apt-get install -y python3-venv git >/dev/null
 id jarvis-llm >/dev/null 2>&1 || sudo useradd --system --no-create-home jarvis-llm
-if [ -d "$APP/.git" ]; then sudo git -C "$APP" pull -q; else sudo git clone -q https://github.com/joshspicy2/jarvis-llm-connector.git "$APP"; fi
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+sudo mkdir -p "$APP"
+sudo cp -r "$SRC"/server.py "$SRC"/requirements.txt "$SRC"/deploy "$APP"/
 sudo python3 -m venv "$APP/.venv"
 sudo "$APP/.venv/bin/pip" install -q -r "$APP/requirements.txt"
 

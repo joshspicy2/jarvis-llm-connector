@@ -19,7 +19,7 @@ API keys are read from environment variables only. Nothing secret lives in this 
 ## Quick deploy (recommended)
 
 1. In Squarespace, add an `llm` `A` record pointing at the VM's public IP.
-2. SSH into the VM and run `bash deploy/install.sh` (it prompts for the keys, installs everything, and prints your connector URL). The OpenAI key can be skipped; only `gemini_research` works until it's added.
+2. SSH into the VM and run `git clone https://github.com/joshspicy2/jarvis-llm-connector && bash jarvis-llm-connector/deploy/install.sh` (it prompts for the keys, installs everything, and prints your connector URL). The OpenAI key can be skipped; only `gemini_research` works until it's added.
 3. Add the printed URL in claude.ai (see "Add it to Claude" below).
 
 ## Manual deploy on the Oracle VM
