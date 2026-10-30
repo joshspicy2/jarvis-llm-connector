@@ -25,7 +25,7 @@
     "operation": "getAll",
     "databaseId": {
      "__rl": true,
-     "value": "4d7129a9-91f4-410b-a2b1-24e659ee7d51",
+     "value": "6cc3d9aad6d14fa39377673274a4cc5f",
      "mode": "id"
     },
     "returnAll": true,
@@ -48,7 +48,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst stages = {};\nfor (const it of $input.all()) { const p = it.json;\n  const stage = find(p,/^(stage|status)$/i) || \"Unsorted\";\n  (stages[stage] = stages[stage] || []).push({ title: titleOf(p) || \"(untitled)\", sub: [find(p,/(town|city|location)/i), find(p,/(service|type)/i)].filter(Boolean).join(\" \u00b7 \") }); }\nreturn [{ json: { body: { stages: Object.entries(stages).map(([name,cards])=>({name,cards})) } } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst ORDER = [\"Booked\",\"In Progress\",\"Awaiting Invoice\",\"Flagged\",\"Paid\"];\nconst stages = Object.fromEntries(ORDER.map(s=>[s,[]]));\nfor (const it of $input.all().filter(i=>i.json.id)) { const p = it.json;\n  const stage = find(p,/^status$/i) || \"Booked\";\n  const when = props(p)[\"Scheduled Date\"]?.date?.start || \"\";\n  (stages[stage] = stages[stage] || []).push({ title: titleOf(p) || \"(untitled)\", sub: [find(p,/^job type$/i), when].filter(Boolean).join(\" \u00b7 \") }); }\nreturn [{ json: { body: { stages: Object.entries(stages).map(([name,cards])=>({name,cards})) } } }];"
    },
    "name": "Shape Pipeline",
    "type": "n8n-nodes-base.code",
@@ -96,7 +96,7 @@
     "operation": "getAll",
     "databaseId": {
      "__rl": true,
-     "value": "REPLACE_WITH_ESTIMATE_RULES_DATABASE_ID",
+     "value": "688aa0475933473da807974ddf90cd3e",
      "mode": "id"
     },
     "returnAll": true,
@@ -119,7 +119,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst rows = $input.all().filter(i=>i.json.id).map(i=>({ service: titleOf(i.json), base: find(i.json,/(price|base|rate)/i), unit: find(i.json,/unit/i), notes: find(i.json,/note/i) }));\nreturn [{ json: { body: rows } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst rows = $input.all().filter(i=>i.json.id && props(i.json)[\"Active\"]?.checkbox !== false).map(i=>({\n  service: titleOf(i.json), category: find(i.json,/^category$/i), base: props(i.json)[\"Base Rate\"]?.number ?? \"\", unit: find(i.json,/^unit$/i),\n  min: props(i.json)[\"Minimum Charge\"]?.number ?? \"\", notes: find(i.json,/^notes$/i) }));\nreturn [{ json: { body: rows } }];"
    },
    "name": "Shape Rules",
    "type": "n8n-nodes-base.code",
@@ -167,7 +167,7 @@
     "operation": "getAll",
     "databaseId": {
      "__rl": true,
-     "value": "REPLACE_WITH_SYSTEM_FLAGS_DATABASE_ID",
+     "value": "b89ec35e9c074425b6acdc6ec356fc5f",
      "mode": "id"
     },
     "returnAll": true,
@@ -190,7 +190,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst row = $input.all().find(i=>i.json.id && /war/i.test(titleOf(i.json)));\nconst on = row ? Object.values(row.json.properties).some(v=>v.type===\"checkbox\" && v.checkbox) : false;\nreturn [{ json: { body: { enabled: on } } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst row = $input.all().find(i=>i.json.id && /war/i.test(titleOf(i.json)));\nreturn [{ json: { body: { enabled: !!(row && props(row.json)[\"Value\"]?.checkbox) } } }];"
    },
    "name": "Shape War",
    "type": "n8n-nodes-base.code",
@@ -238,7 +238,7 @@
     "operation": "getAll",
     "databaseId": {
      "__rl": true,
-     "value": "REPLACE_WITH_SYSTEM_FLAGS_DATABASE_ID",
+     "value": "b89ec35e9c074425b6acdc6ec356fc5f",
      "mode": "id"
     },
     "returnAll": true,
@@ -283,7 +283,7 @@
     "propertiesUi": {
      "propertyValues": [
       {
-       "key": "Enabled|checkbox",
+       "key": "Value|checkbox",
        "checkboxValue": "={{ $json.enabled }}"
       }
      ]
@@ -354,7 +354,7 @@
     "operation": "getAll",
     "databaseId": {
      "__rl": true,
-     "value": "REPLACE_WITH_AGENT_ACTIVITY_LOG_DATABASE_ID",
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
      "mode": "id"
     },
     "returnAll": true,
@@ -377,7 +377,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst rows = $input.all().filter(i=>i.json.id).sort((a,b)=>new Date(a.json.created_time)-new Date(b.json.created_time)).slice(-25)\n .map(i=>({ t: new Date(i.json.created_time).toLocaleTimeString(\"en-US\",{hour12:false,timeZone:\"America/New_York\"}), text: [find(i.json,/^agent$/i), titleOf(i.json)].filter(Boolean).join(\": \") }));\nreturn [{ json: { body: rows } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst ts = i => props(i.json)[\"Timestamp\"]?.date?.start || i.json.created_time;\nconst rows = $input.all().filter(i=>i.json.id).sort((a,b)=>new Date(ts(a))-new Date(ts(b))).slice(-25)\n .map(i=>({ t: new Date(ts(i)).toLocaleTimeString(\"en-US\",{hour12:false,timeZone:\"America/New_York\"}),\n   text: [find(i.json,/^agent$/i), titleOf(i.json), find(i.json,/^output notes$/i)].filter(Boolean).join(\": \") }));\nreturn [{ json: { body: rows } }];"
    },
    "name": "Shape Log",
    "type": "n8n-nodes-base.code",
@@ -425,7 +425,7 @@
     "operation": "getAll",
     "databaseId": {
      "__rl": true,
-     "value": "REPLACE_WITH_AGENT_ACTIVITY_LOG_DATABASE_ID",
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
      "mode": "id"
     },
     "returnAll": true,
@@ -448,7 +448,7 @@
   },
   {
    "parameters": {
-    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst names = [\"Router\",\"Estimate\",\"Scheduling\",\"Finance\",\"Content\",\"Integrator\"];\nconst last = {};\nfor (const i of $input.all().filter(i=>i.json.id)) { const a = find(i.json,/^agent$/i); if (!a) continue;\n  const t = new Date(i.json.created_time); if (!last[a] || t > last[a].t) last[a] = { t, text: titleOf(i.json), status: find(i.json,/^status$/i).toLowerCase() }; }\nconst out = names.map(n => { const l = last[n]; if (!l) return { name:n, status:\"idle\", detail:\"no activity yet\" };\n  const recent = Date.now() - l.t < 10*60*1000; const st = /await|wait|approval/.test(l.status) ? \"waiting\" : /fail|error/.test(l.status) ? \"error\" : recent ? \"active\" : \"idle\";\n  return { name:n, status:st, detail:l.text }; });\nreturn [{ json: { body: out } }];"
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\n\nconst names = [\"Router\",\"Estimate\",\"Scheduling\",\"Finance\",\"Content\",\"Integrator\"];\nconst ts = i => new Date(props(i.json)[\"Timestamp\"]?.date?.start || i.json.created_time);\nconst last = {};\nfor (const i of $input.all().filter(i=>i.json.id)) { const a = find(i.json,/^agent$/i).replace(/ Agent$/,\"\"); if (!a) continue;\n  if (!last[a] || ts(i) > last[a].t) last[a] = { t: ts(i), text: titleOf(i.json), status: find(i.json,/^status$/i) }; }\nconst map = { Thinking:\"active\", Working:\"active\", Error:\"error\", Done:\"idle\", Idle:\"idle\" };\nreturn [{ json: { body: names.map(n => last[n] ? { name:n, status: map[last[n].status] || \"idle\", detail: last[n].text } : { name:n, status:\"idle\", detail:\"no activity yet\" }) } }];"
    },
    "name": "Shape Agents",
    "type": "n8n-nodes-base.code",

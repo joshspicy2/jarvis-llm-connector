@@ -7,11 +7,10 @@
 1. n8n → Workflows → Import from file → this JSON.
 2. On every Notion node, select your Notion credential (create it in n8n with a Notion integration
    that has been shared with the Jarvis databases). The credential lives only in n8n.
-3. Replace the placeholder database IDs: **Estimate Rules**, **System Flags**, **Agent Activity Log**
-   (Pipeline is prefilled). n8n needs the *database* ID, not the `collection://` ID.
-4. Property names are matched loosely (title column = name; `Stage`/`Status`, `Town`, `Service`, `Price`/`Base`, `Unit`, `Notes`, `Agent`).
-   War Mode update writes the checkbox named **`Enabled`** on the row whose title contains "War" — rename in the
-   "Notion Update War" node if yours differs.
+3. Database IDs and column names are already filled in from your live Notion schemas (Pipeline, Estimate Rules,
+   System Flags, Agent Activity Log). If a Notion node says the database isn't found, share that database with your
+   n8n Notion integration.
+4. War Mode writes the `Value` checkbox on the System Flags row whose `Flag` contains "War". That row must exist.
 5. Activate the workflow. Test: `curl https://ops.hightidewash.net/webhook/jarvis/war-mode`.
 6. Set the Webhook nodes' **Allowed Origins** from `*` to your Cloudflare Pages domain.
 
@@ -22,6 +21,6 @@ Pick one:
 - Caddy `basicauth` on `/webhook/jarvis/*` plus browser sign-in.
 
 ## Status
-- Agent status is derived from the Activity Log (entry within 10 min = active, status containing "await" = waiting).
+- Agent status comes from each agent's latest Activity Log row (Thinking/Working = active, Error = error, otherwise idle). Integrator has no Agent option in the log yet, so it shows idle.
 - `/jarvis/chat` is a stub until the Router agent is wired in.
 - Untested against live Notion (no access from the cloud). Check the first execution in n8n and adjust property names.

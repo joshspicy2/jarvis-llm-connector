@@ -114,10 +114,10 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 // ---- SAMPLE DATA (fallback only; clearly tagged in the UI) ----
 const SAMPLE = {
   pipeline: { stages: [
-    { name:"New Lead", cards:[{title:"Sample: Dana R.", sub:"High Springs · Deep Clean"}] },
-    { name:"Estimate Drafted", cards:[{title:"Sample: Lee Family", sub:"Alachua · Standard"}] },
-    { name:"Awaiting Approval", cards:[{title:"Sample: M. Ortiz", sub:"Gainesville · Move-Out"}] },
-    { name:"Scheduled", cards:[] },
+    { name:"Booked", cards:[{title:"Sample: Dana R.", sub:"Interior Cleaning · 2026-11-03"}] },
+    { name:"In Progress", cards:[{title:"Sample: Lee Family", sub:"Interior Cleaning"}] },
+    { name:"Awaiting Invoice", cards:[{title:"Sample: M. Ortiz", sub:"Interior Cleaning"}] },
+    { name:"Flagged", cards:[] },
     { name:"Paid", cards:[] } ] },
   agents: [
     {name:"Router",status:"active",detail:"Classifying inbound (sample)"},
@@ -173,8 +173,8 @@ function renderLog(rows){ $("log").innerHTML=(rows||[]).map(r=>`<div><em>[${esc(
 function renderRules(rows){
   if(!rows || !rows.length){
     $("rules").innerHTML = `<div class="empty">No estimate rules yet. Add rows in the Notion Estimate Rules database and they will appear here.</div>`; return; }
-  $("rules").innerHTML = `<table><thead><tr><th>Service</th><th>Base</th><th>Unit</th><th>Notes</th></tr></thead><tbody>${
-    rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.base)}</td><td>${esc(r.unit)}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
+  $("rules").innerHTML = `<table><thead><tr><th>Service</th><th>Category</th><th>Base</th><th>Unit</th><th>Min</th><th>Notes</th></tr></thead><tbody>${
+    rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.category)}</td><td>${r.base!==""?"$"+esc(r.base):""}</td><td>${esc(r.unit)}</td><td>${r.min!==""?"$"+esc(r.min):""}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
 }
 function setWar(on){
   state.war = on; document.body.classList.toggle("war", on);
