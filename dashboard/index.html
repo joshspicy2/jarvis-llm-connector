@@ -8,10 +8,10 @@
 :root{--bg:#02080c;--panel:#04141b;--line:#0b4a5a;--text:#bff3ff;--mute:#4d8a99;--accent:#00d4ff;--amber:#ffb340;--ok:#00e5a0;--warn:#ffb340;--bad:#ff4d4d;
  --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
 body.war{--bg:#0a0204;--panel:#160509;--line:#5a0b1a;--text:#ffd0d0;--mute:#995060;--accent:#ff3b3b}
-*{box-sizing:border-box}html,body{margin:0;height:100%}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;min-width:1200px;min-height:700px}
 body{background:var(--bg);color:var(--text);font:13px/1.45 var(--mono);transition:background .6s}
 #sea{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.35}
-.app{position:relative;z-index:1;min-height:100%;display:flex;flex-direction:column}
+.app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 24px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 85%,transparent)}
 h1{margin:0;font-size:16px;letter-spacing:.3em;color:var(--accent)}
 h1 small{display:block;font-size:10px;letter-spacing:.15em;color:var(--mute);font-weight:400;text-transform:uppercase}
@@ -20,9 +20,9 @@ h1 small{display:block;font-size:10px;letter-spacing:.15em;color:var(--mute);fon
 .hdr-mid{display:flex;gap:32px}
 .badge{padding:3px 10px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
 .badge.live{color:var(--ok);border-color:var(--ok)}.badge.sample{color:var(--warn);border-color:var(--warn)}
-.main{flex:1;display:grid;grid-template-columns:minmax(260px,340px) 1fr minmax(260px,340px);gap:24px;padding:24px 24px 100px}
-@media(max-width:1000px){.main{grid-template-columns:1fr}.hdr-mid{display:none}}
-.col{display:flex;flex-direction:column;gap:20px;min-width:0}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,26vw) 1fr minmax(300px,26vw);gap:24px;padding:24px 24px 96px}
+.col{display:flex;flex-direction:column;gap:20px;min-width:0;min-height:0}
+.col>.panel{flex:0 0 auto}.col>.panel.grow{flex:1 1 0;min-height:0;overflow:auto}
 .panel{position:relative;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 85%,transparent);padding:14px}
 .panel::before,.panel::after{content:"";position:absolute;width:10px;height:10px;border:2px solid var(--accent)}
 .panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
@@ -39,11 +39,11 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--mute)}
 .active .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}.waiting .dot{background:var(--amber)}.error .dot{background:var(--bad)}
 .st{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
-.log{font-size:10px;max-height:190px;overflow:auto}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
+.log{font-size:11px}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
 .war-btn{width:100%;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:none;border:1px solid var(--line);color:var(--text);font:inherit;letter-spacing:.2em;padding:10px;text-transform:uppercase}
 .war-btn.on{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--accent) inset}
-.center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:420px}
-#reactor{width:min(480px,100%);height:auto;overflow:visible}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#reactor{height:min(62vh,100%);max-width:100%;aspect-ratio:1;overflow:visible}
 .ring{fill:none;stroke:var(--accent);stroke-opacity:.5}
 .spin{transform-origin:200px 200px;animation:spin 24s linear infinite}.spin2{animation-duration:40s;animation-direction:reverse}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -77,7 +77,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
   </header>
   <div class="main">
     <div class="col">
-      <section class="panel"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2><div id="pipeline"></div></section>
+      <section class="panel grow"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2><div id="pipeline"></div></section>
       <section class="panel"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
     </div>
     <div class="col center">
@@ -96,7 +96,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <section class="panel"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
         <button class="war-btn" id="war"><span id="warLabel">War Mode: off</span><span>⏻</span></button>
         <div style="color:var(--mute);font-size:10px;margin-top:6px">Stored in Notion System Flags via n8n.</div></section>
-      <section class="panel"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log"></div></section>
+      <section class="panel grow"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log"></div></section>
     </div>
   </div>
 </div>
