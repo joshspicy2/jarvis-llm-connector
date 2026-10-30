@@ -20,7 +20,23 @@ Pick one:
 - **Cloudflare Access** in front of both the Pages site and ops.hightidewash.net/webhook/jarvis/* (recommended; free tier; no code).
 - Caddy `basicauth` on `/webhook/jarvis/*` plus browser sign-in.
 
+## Workflows
+Each has a sibling doc; import them all, then set the Notion/Anthropic credentials in the n8n UI.
+
+| Workflow JSON | Doc |
+|---|---|
+| `jarvis-dashboard-api.json` | `CHAT.md` (chat endpoint) |
+| `router-workflow.json` | `ROUTER.md` |
+| `conductor-workflow.json` | `CONDUCTOR.md` |
+| `estimator-workflow.json` | `ESTIMATOR.md` |
+| `qa-workflow.json` | `QA.md` |
+| `support-workflow.json` | `SUPPORT.md` |
+| `marketer-workflow.json` | `MARKETER.md` |
+| `shield-ops-workflow.json` | `SHIELD-OPS.md` |
+| `approvals-api-workflow.json` | `APPROVALS-API.md` |
+| `intake-workflow.json` | `INTAKE.md` |
+
 ## Status
 - Agent status comes from each agent's latest Activity Log row (Thinking/Working = active, Error = error, otherwise idle). Old log names map to the new ones (Estimate→Estimator, Content→Marketer, Integrator→Conductor).
-- `/jarvis/chat` is a stub until the Router agent is wired in.
+- `/jarvis/chat` is wired to the LLM (see `CHAT.md`).
 - Untested against live Notion (no access from the cloud). Check the first execution in n8n and adjust property names.

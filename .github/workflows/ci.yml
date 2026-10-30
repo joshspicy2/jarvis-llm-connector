@@ -43,6 +43,11 @@ jobs:
           npx playwright install --with-deps chromium
           node tests/dashboard/smoke.test.js
 
+      - name: Agent definition checks
+        run: |
+          python3 scripts/check_agents.py
+          python3 -I scripts/test_check_agents.py
+
       - name: Secret scan
         run: |
           if git grep -nE -e 'sk-ant-[A-Za-z0-9_-]{20,}' -e 'secret_[A-Za-z0-9_]{20,}' -e 'ntn_[A-Za-z0-9_]{20,}' -- . ':(exclude)scripts/test_validate_workflows.py'; then

@@ -50,6 +50,8 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
 @media(max-height:820px){.agent p{display:none}.agent{padding:3px 0}.panel{padding:10px}.col{gap:12px}.main{gap:16px;padding-top:16px}}
 .col>.panel.shrink{flex:0 1 auto;min-height:0;overflow:auto}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
 .war-btn{width:100%;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:none;border:1px solid var(--line);color:var(--text);font:inherit;letter-spacing:.2em;padding:10px;text-transform:uppercase}
+.war-btn:focus-visible,#chatform button:focus-visible,#chatin:focus-visible,.apr:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 .war-btn.on{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--accent) inset}
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
 #reactor{height:min(62vh,100%);max-width:100%;aspect-ratio:1;overflow:visible}
@@ -82,16 +84,16 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <div class="stat">System status<b id="sysstat">OPTIMAL</b></div>
       <div class="stat">Local time<b id="clock">--:--:--</b></div>
     </div>
-    <span id="conn" class="badge sample">sample data</span>
+    <span id="conn" class="badge sample" role="status" aria-live="polite">sample data</span>
   </header>
   <div class="main">
     <div class="col">
       <section class="panel grow"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2><div id="pipeline"></div></section>
       <section class="panel rules"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
-      <section class="panel grow"><h2>APPROVALS <i><span class="cnt" id="aprCount">0</span> <span class="samp-tag" id="aprSample" hidden>SAMPLE</span></i></h2><div id="approvals"></div></section>
+      <section class="panel grow"><h2>APPROVALS <i><span class="cnt" id="aprCount">0</span> <span class="samp-tag" id="aprSample" hidden>SAMPLE</span></i></h2><div id="approvals" role="region" aria-label="Approvals" tabindex="0"></div></section>
     </div>
     <div class="col center">
-      <svg id="reactor" viewBox="-40 -10 480 420" aria-label="Agent reactor">
+      <svg id="reactor" viewBox="-40 -10 480 420" role="img" aria-label="Agent reactor">
         <g class="spin"><circle class="ring" cx="200" cy="200" r="190" stroke-dasharray="4 6"/></g>
         <circle class="ring" cx="200" cy="200" r="150"/>
         <g class="spin spin2"><circle class="ring" cx="200" cy="200" r="105" stroke-dasharray="30 8"/></g>
@@ -104,15 +106,15 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
     <div class="col">
       <section class="panel shrink"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
       <section class="panel"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
-        <button class="war-btn" id="war"><span id="warLabel">War Mode: off</span><span>⏻</span></button>
+        <button class="war-btn" id="war" type="button"><span id="warLabel">War Mode: off</span><span aria-hidden="true">⏻</span></button>
         <div style="color:var(--mute);font-size:10px;margin-top:6px">Stored in Notion System Flags via n8n.</div></section>
-      <section class="panel grow"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log"></div></section>
+      <section class="panel grow"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log" role="log" aria-live="polite" aria-label="Activity log" tabindex="0"></div></section>
     </div>
   </div>
 </div>
 <div class="chatbar">
-  <div class="chatlog" id="chatlog"></div>
-  <form id="chatform"><div class="orb"></div><input id="chatin" placeholder="Awaiting command…" autocomplete="off"><button>SEND</button></form>
+  <div class="chatlog" id="chatlog" role="log" aria-live="polite" aria-label="Chat messages"></div>
+  <form id="chatform"><div class="orb" aria-hidden="true"></div><input id="chatin" aria-label="Command for Jarvis" placeholder="Awaiting command…" autocomplete="off"><button type="submit" aria-label="Send message">SEND</button></form>
 </div>
 
 <script src="config.js"></script>
@@ -183,7 +185,8 @@ function renderAgents(list){
   $("nodes").innerHTML = rows.map(({n,a},i)=>{const ang=(i/N)*Math.PI*2-Math.PI/2,c=Math.cos(ang),s=Math.sin(ang),x=200+150*c,y=200+150*s,lx=200+188*c,ly=200+188*s+3;
     return `<g class="node ${esc(a.status)}"><circle cx="${x}" cy="${y}" r="13"/><text x="${x}" y="${y+3}" style="font-size:8px">${esc(n.slice(0,3).toUpperCase())}</text><text x="${lx}" y="${ly}" style="fill:var(--mute);font-size:8px;text-anchor:${c>0.3?"start":c<-0.3?"end":"middle"}">${esc(n.toUpperCase())}</text></g>`}).join("");
 }
-function renderLog(rows){ $("log").innerHTML=(Array.isArray(rows)?rows:[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); $("log").scrollTop=1e9; }
+let lastLog = null;
+function renderLog(rows){ const h=(Array.isArray(rows)?rows:[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); if(h===lastLog) return; lastLog=h; $("log").innerHTML=h; $("log").scrollTop=1e9; }
 function renderRules(rows){
   if(!Array.isArray(rows)) rows=[];
   if( !rows.length){
@@ -197,11 +200,11 @@ function renderApprovals(rows, isSample){
   if(!rows.length){ $("approvals").innerHTML = `<div class="empty">Nothing waiting</div>`; return; }
   $("approvals").innerHTML = rows.map(r=>{
     const q = String(r.qa||"Not checked"), cls = q==="Pass"?"pass":q==="Fail"?"fail":"";
-    return `<div class="apr"><b>${esc(r.title)}</b><div class="meta"><span>${esc(r.agent)} · ${esc(r.type)}${r.related_job?" · "+esc(r.related_job):""}</span><span class="chip ${cls}">QA ${esc(q)}</span></div>${r.preview?`<p>${esc(r.preview)}</p>`:""}</div>`}).join("");
+    return `<div class="apr" tabindex="0" role="group" aria-label="${esc(r.title)}"><b>${esc(r.title)}</b><div class="meta"><span>${esc(r.agent)} · ${esc(r.type)}${r.related_job?" · "+esc(r.related_job):""}</span><span class="chip ${cls}">QA ${esc(q)}</span></div>${r.preview?`<p>${esc(r.preview)}</p>`:""}</div>`}).join("");
 }
 function setWar(on){
-  state.war = on; document.body.classList.toggle("war", on);
-  $("war").classList.toggle("on", on); $("warLabel").textContent = "War Mode: " + (on?"ON":"off");
+  state.war = on; if(typeof reduce!=="undefined" && reduce) requestAnimationFrame(frame); document.body.classList.toggle("war", on);
+  $("war").classList.toggle("on", on); $("war").setAttribute("aria-pressed", String(on)); $("warLabel").textContent = "War Mode: " + (on?"ON":"off");
   $("core1").textContent = on?"WAR":"CORE"; $("core2").textContent = on?"MODE":"ACTIVE"; $("sysstat").textContent = on?"ALERT":"OPTIMAL";
 }
 
@@ -215,7 +218,7 @@ async function refresh(){
   renderApprovals(ap, aprSample);
   renderPipeline(p); renderAgents(a); renderRules(r); renderLog(lg);
   if(w && typeof w.enabled==="boolean"){ if(!state.pending && seq===state.warSeq){ state.warKnown=true; setWar(w.enabled); } }
-  else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; }
+  else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; $("war").removeAttribute("aria-pressed"); }
   $("war").disabled = !state.warKnown || state.pending;
   markSample();
 }
@@ -241,10 +244,10 @@ $("chatform").addEventListener("submit", async e=>{
 
 // ---- Sea background: layered shoreline waves; storm + foam in War Mode ----
 const cv = $("sea"), g = cv.getContext("2d"); let W,H,foam=[],t=0,storm=0;
-function size(){ W=cv.width=innerWidth; H=cv.height=innerHeight; } addEventListener("resize",size); size();
-const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function size(){ W=cv.width=innerWidth; H=cv.height=innerHeight; } addEventListener("resize",()=>{size(); if(reduce) frame();}); size();
+var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function frame(){
-  t += reduce ? 0 : 0.012; storm += ((state.war?1:0)-storm)*0.03;
+  t += reduce ? 0 : 0.012; storm = reduce ? (state.war?1:0) : storm + ((state.war?1:0)-storm)*0.03;
   g.clearRect(0,0,W,H);
   const layers = 5;
   for(let l=0;l<layers;l++){
@@ -260,7 +263,7 @@ function frame(){
     for(const p of foam){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life-=0.015;
       g.fillStyle=`rgba(255,255,255,${Math.max(p.life,0)*storm})`; g.beginPath(); g.arc(p.x,p.y,1.5+p.life*1.5,0,6.3); g.fill(); }
   }
-  requestAnimationFrame(frame);
+  if(!reduce) requestAnimationFrame(frame);
 }
 frame();
 

@@ -12,7 +12,8 @@ Single job on `ubuntu-latest` (Node 22, Python 3.12), steps in order:
 4. `node --test 'tests/n8n/*.test.js'`
 5. Dashboard smoke test: installs `playwright@1.63.0` (matches the version used
    locally) with `--no-save`, installs Chromium, runs `tests/dashboard/smoke.test.js`.
-6. Secret scan: `git grep` fails the job on `sk-ant-` + 20 chars, `secret_` + 20 chars or
+6. Agent definition checks: `python3 scripts/check_agents.py` (11 files in `.claude/agents/`: frontmatter, identical shared rules block, Agent Activity Log and Approvals mentions) plus `python3 -I scripts/test_check_agents.py`.
+7. Secret scan: `git grep` fails the job on `sk-ant-` + 20 chars, `secret_` + 20 chars or
    `ntn_` + 20 chars in tracked files (excluding the fixtures in
    `scripts/test_validate_workflows.py`).
 

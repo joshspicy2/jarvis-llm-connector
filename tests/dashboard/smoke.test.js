@@ -200,3 +200,64 @@ test('8. chat reply and slow (7s) reply', async () => {
     assert.ok(!/No reply received/.test(await page.textContent('#chatlog')));
   } finally { await ctx.close(); }
 });
+
+test('9. a11y attributes present; war aria-pressed tracks state', async () => {
+  const { ctx, page } = await setup();
+  try {
+    await page.waitForFunction(() => document.getElementById('conn').classList.contains('live'));
+    assert.equal(await page.getAttribute('#conn', 'role'), 'status');
+    assert.equal(await page.getAttribute('#conn', 'aria-live'), 'polite');
+    assert.equal(await page.getAttribute('#log', 'aria-live'), 'polite');
+    assert.ok(await page.getAttribute('#chatin', 'aria-label'));
+    assert.ok(await page.getAttribute('#chatform button', 'aria-label'));
+    assert.equal(await page.getAttribute('#war', 'aria-pressed'), 'false');
+    await page.click('#war');
+    await page.waitForFunction(() => document.getElementById('war').getAttribute('aria-pressed') === 'true');
+  } finally { await ctx.close(); }
+});
+
+test('10. unknown War Mode state has no aria-pressed', async () => {
+  const { ctx, page } = await setup({ fail: true });
+  try {
+    await page.waitForFunction(() => document.getElementById('conn').textContent.includes('unreachable'));
+    assert.equal(await page.getAttribute('#war', 'aria-pressed'), null);
+  } finally { await ctx.close(); }
+});
+
+test('11. Tab reaches War Mode button with visible focus style', async () => {
+  const { ctx, page } = await setup();
+  try {
+    await page.waitForFunction(() => !document.getElementById('war').disabled);
+    let reached = false;
+    for (let i = 0; i < 20 && !reached; i++) {
+      await page.keyboard.press('Tab');
+      reached = await page.evaluate(() => document.activeElement && document.activeElement.id === 'war');
+    }
+    assert.ok(reached, 'War button reachable by Tab');
+    assert.notEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'none');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.getElementById('warLabel').textContent === 'War Mode: ON');
+  } finally { await ctx.close(); }
+});
+
+test('12. reduced motion stops CSS animations', async () => {
+  const { ctx, page } = await setup();
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('conn').classList.contains('live'));
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.spin')).animationName), 'none');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.orb')).animationName), 'none');
+  } finally { await ctx.close(); }
+});
+
+test('13. Enter in chat input sends a POST', async () => {
+  const { ctx, page, posts } = await setup();
+  try {
+    await page.focus('#chatin');
+    await page.keyboard.type('status');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Jarvis: pong/.test(document.getElementById('chatlog').textContent));
+    assert.deepEqual(posts.filter(p => p.name === 'chat').map(p => p.body.message), ['status']);
+  } finally { await ctx.close(); }
+});
