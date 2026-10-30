@@ -16,7 +16,13 @@ API keys are read from environment variables only. Nothing secret lives in this 
 - An **OpenAI API key** from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). This is billed separately from a ChatGPT Plus subscription; add a payment method and set a monthly limit under Billing.
 - A host. These steps use the existing Oracle Cloud Ubuntu VM that already runs Caddy for `ops.hightidewash.net`.
 
-## Deploy on the Oracle VM
+## Quick deploy (recommended)
+
+1. In Squarespace, add an `llm` `A` record pointing at the VM's public IP.
+2. SSH into the VM and run `bash deploy/install.sh` (it prompts for the keys, installs everything, and prints your connector URL). The OpenAI key can be skipped; only `gemini_research` works until it's added.
+3. Add the printed URL in claude.ai (see "Add it to Claude" below).
+
+## Manual deploy on the Oracle VM
 
 1. **DNS.** In Squarespace, add an `A` record for `llm` pointing at the VM's public IP (the same IP `ops` uses).
 
@@ -99,7 +105,7 @@ To rotate a key or the secret, edit `/etc/jarvis-llm/env`, run `sudo systemctl r
 | `OPENAI_API_KEY` | none | Required for `chatgpt_ask` and `second_opinion`. |
 | `CONNECTOR_SECRET` | none | Required, at least 24 characters. Forms part of the URL. |
 | `ALLOWED_HOSTS` | none | Public hostname(s), comma separated. Enables DNS-rebinding protection. |
-| `GEMINI_MODEL` | `gemini-2.5-pro` | Default Gemini model; any call can override it. |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model; any call can override it. |
 | `OPENAI_MODEL` | `gpt-5` | Default OpenAI model; any call can override it. |
 | `HOST` / `PORT` | `127.0.0.1` / `8787` | Keep it on localhost; Caddy handles the public side. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Per upstream call. |

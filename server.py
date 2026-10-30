@@ -24,7 +24,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 GEMINI_BASE_URL = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5")
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "180"))
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8000"))

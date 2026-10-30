@@ -80,7 +80,7 @@ async def test_gemini_research(servers):
     assert "Gemini says: researched 'carpet cleaning prices in Gainesville FL'" in text
     assert text.count("https://example.com/a") == 1  # duplicate sources collapsed
     req = [r for r in httpx.get(f"{mock}/_received").json() if r["api"] == "gemini"][-1]
-    assert req["path"].endswith("/models/gemini-2.5-pro:generateContent")
+    assert req["path"].endswith("/models/gemini-2.5-flash:generateContent")
     assert req["body"]["tools"] == [{"google_search": {}}]
 
 
