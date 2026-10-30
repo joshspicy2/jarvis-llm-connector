@@ -81,7 +81,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <section class="panel"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
     </div>
     <div class="col center">
-      <svg id="reactor" viewBox="0 0 400 400" aria-label="Agent reactor">
+      <svg id="reactor" viewBox="-40 -10 480 420" aria-label="Agent reactor">
         <g class="spin"><circle class="ring" cx="200" cy="200" r="190" stroke-dasharray="4 6"/></g>
         <circle class="ring" cx="200" cy="200" r="150"/>
         <g class="spin spin2"><circle class="ring" cx="200" cy="200" r="105" stroke-dasharray="30 8"/></g>
@@ -120,17 +120,17 @@ const SAMPLE = {
     { name:"Flagged", cards:[] },
     { name:"Paid", cards:[] } ] },
   agents: [
+    {name:"Conductor",status:"active",detail:"Sequencing handoffs (sample)"},
     {name:"Router",status:"active",detail:"Classifying inbound (sample)"},
-    {name:"Estimate",status:"waiting",detail:"Needs pricing inputs (sample)"},
-    {name:"Scheduling",status:"idle",detail:"—"},
-    {name:"Finance",status:"idle",detail:"—"},
-    {name:"Content",status:"idle",detail:"Phase 2"},
-    {name:"Integrator",status:"idle",detail:"Daily brief 7:00 (sample)"} ],
+    {name:"Estimator",status:"waiting",detail:"Needs pricing inputs (sample)"},
+    {name:"QA",status:"idle",detail:"—"},
+    {name:"Marketer",status:"idle",detail:"Phase 2"},
+    {name:"Shield/Ops",status:"active",detail:"Watching flags & budget (sample)"} ],
   rules: [],  // intentionally empty: real rows live in Notion Estimate Rules DB
   warMode: { enabled:false },
   log: [ {t:"--:--:--", text:"Sample entry: Router classified inbound lead"}, {t:"--:--:--", text:"Sample entry: Estimate draft awaiting approval"} ],
 };
-const AGENT_ORDER = ["Router","Estimate","Scheduling","Finance","Content","Integrator"];
+const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
 const state = { live:{}, war:false, pending:false };
 
 async function call(key, body){
@@ -166,8 +166,9 @@ function renderAgents(list){
   const by = Object.fromEntries((list||[]).map(a=>[a.name,a]));
   const rows = AGENT_ORDER.map(n=>({n, a: by[n]||{status:"idle",detail:"no data"}}));
   $("agents").innerHTML = rows.map(({n,a})=>`<div class="agent ${esc(a.status)}"><div><b><span class="dot"></span>${n}</b><p>${esc(a.detail)}</p></div><span class="st">${esc(a.status)}</span></div>`).join("");
-  $("nodes").innerHTML = rows.map(({n,a},i)=>{const ang=(i/6)*Math.PI*2-Math.PI/2,x=200+150*Math.cos(ang),y=200+150*Math.sin(ang);
-    return `<g class="node ${esc(a.status)}"><circle cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y+3}">${n.slice(0,3).toUpperCase()}</text><text x="${x}" y="${y+(y>200?30:-22)}" style="fill:var(--mute)">${n.toUpperCase()}</text></g>`}).join("");
+  const N = rows.length;
+  $("nodes").innerHTML = rows.map(({n,a},i)=>{const ang=(i/N)*Math.PI*2-Math.PI/2,c=Math.cos(ang),s=Math.sin(ang),x=200+150*c,y=200+150*s,lx=200+188*c,ly=200+188*s+3;
+    return `<g class="node ${esc(a.status)}"><circle cx="${x}" cy="${y}" r="13"/><text x="${x}" y="${y+3}" style="font-size:8px">${esc(n.slice(0,3).toUpperCase())}</text><text x="${lx}" y="${ly}" style="fill:var(--mute);font-size:8px;text-anchor:${c>0.3?"start":c<-0.3?"end":"middle"}">${esc(n.toUpperCase())}</text></g>`}).join("");
 }
 function renderLog(rows){ $("log").innerHTML=(rows||[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); }
 function renderRules(rows){
