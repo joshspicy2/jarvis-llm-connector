@@ -9,6 +9,7 @@ window.JARVIS_CONFIG = {
     rules:     { method: "GET",  path: "/jarvis/estimate-rules" },
     warMode:   { method: "GET",  path: "/jarvis/war-mode" },
     setWarMode:{ method: "POST", path: "/jarvis/war-mode" },
+    log:       { method: "GET",  path: "/jarvis/activity-log" },
     chat:      { method: "POST", path: "/jarvis/chat" },
   },
   POLL_MS: 15000,
