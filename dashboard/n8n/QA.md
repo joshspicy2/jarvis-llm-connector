@@ -14,16 +14,25 @@ QA never edits Draft and never changes Status. It does not interrupt a human, so
 - Set the Notion credential on each Notion node (left empty). Webhook origin: `https://REPLACE_WITH_DASHBOARD_ORIGIN`.
 - Add `Agent = QA` as an option in the Activity Log Agent select.
 - Draft of an Estimate must contain the Estimator JSON (section 2.5 of router-and-estimator.md): QA reads the JSON
-  after the `[estimate-json]` marker (readable text may precede it), else parses the whole Draft as JSON. Rich-text chunks are joined.
+  after the `[estimate-json]` marker (readable text may precede it), else parses the whole Draft as JSON. Rich-text chunks are joined: the Estimator, Support and Marketer workflows write Draft as several rich_text items of <=1900 chars and QA concatenates every item's `plain_text` before parsing (Notion Get Approval uses `simple:false`).
+
+## Invocation
+Nothing chains to this workflow; the Estimator, Support and Marketer return `approval_id` and you POST it to `/jarvis/qa` (curl above in each workflow's doc):
+`curl -X POST https://<n8n-host>/webhook/jarvis/qa -H 'content-type: application/json' -d '{"approval_id":"<id>"}'`
 
 ## Estimate checks done in code
 E1 shape, E2 rule exists and Active, E3 fields equal Notion, E5 computed/line_total/minimum_applied/2dp,
-E6 subtotal/total, E8 add-on needs a main service, E9 draft vs needs_info, E10 duplicate Active rules,
+E6 subtotal/total/estimate-level minimum, E8 add-on needs a main service, E9 draft vs needs_info, E10 duplicate Active rules,
 E11 rule Notes present, E13 secret/card pattern scan, E14 needs_human true. Flat Rate quantity must be 1.
 
-Minimum charge follows `estimator/estimate.py`: it applies to the Interior/Exterior subtotal using the
-highest minimum among primary rules; Add-Ons are excluded. Total must also equal the sum of line_totals,
-so a draft with several primary lines where each line applies its own minimum will Fail (conservative).
+Minimum charge follows `estimator/estimate.py`: it applies once to the combined Interior/Exterior subtotal using the
+highest minimum among primary rules; Add-Ons are excluded. Each line's `line_total` must equal its `computed`
+(per-line `minimum_applied` false); `total` must equal sum(line_totals) plus the estimate-level `minimum_adjustment`,
+and `minimum_applied`, `minimum_charge`, `minimum_adjustment` are checked at estimate level (E6).
+E3 compares `minimum_charge` to the rule only for Interior/Exterior lines; Add-On lines expect 0 whatever the rule says.
+E8 (Add-On without a main service) is raised only for `draft`; a `needs_info` draft for an add-on-only request passes.
+All money math is integer cents with half-up rounding (BigInt decimal), identical to the Estimator and estimate.py
+(45 x 1.005 = 45.23 in both).
 
 ## Listed in `manual_checks` (human/LLM review)
 E4 quantities vs intake, E7 services vs request, E12 invented assumptions, E13 internal rule-problem text,

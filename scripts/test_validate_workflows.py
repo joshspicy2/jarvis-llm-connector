@@ -14,6 +14,7 @@ import validate_workflows as vw  # noqa: E402
 
 WEBHOOK = "n8n-nodes-base.webhook"
 CODE = "n8n-nodes-base.code"
+OK_ORIGIN = "https://REPLACE_WITH_DASHBOARD_ORIGIN"
 
 
 def webhook(name, method="GET", path="jarvis/x", origins=None):
@@ -39,9 +40,9 @@ def good_workflow():
     return {
         "name": "fixture",
         "nodes": [
-            webhook("Hook GET", "GET", "jarvis/a", origins="*"),
+            webhook("Hook GET", "GET", "jarvis/a", origins=OK_ORIGIN),
             code("Shape A"),
-            webhook("Hook POST", "POST", "jarvis/b", origins="https://example.com"),
+            webhook("Hook POST", "POST", "jarvis/b", origins=OK_ORIGIN),
             code("Shape B"),
         ],
         "connections": {
@@ -143,8 +144,8 @@ class WebhookRouteTests(unittest.TestCase):
     def test_same_path_different_method_is_allowed(self):
         wf = {
             "nodes": [
-                webhook("Get", "GET", "jarvis/same", origins="https://x.test"),
-                webhook("Post", "POST", "jarvis/same", origins="https://x.test"),
+                webhook("Get", "GET", "jarvis/same", origins=OK_ORIGIN),
+                webhook("Post", "POST", "jarvis/same", origins=OK_ORIGIN),
             ],
             "connections": {},
         }
@@ -154,8 +155,8 @@ class WebhookRouteTests(unittest.TestCase):
     def test_duplicate_method_and_path_fails(self):
         wf = {
             "nodes": [
-                webhook("First", "GET", "jarvis/dup", origins="https://x.test"),
-                webhook("Second", "GET", "/jarvis/dup/", origins="https://x.test"),
+                webhook("First", "GET", "jarvis/dup", origins=OK_ORIGIN),
+                webhook("Second", "GET", "/jarvis/dup/", origins=OK_ORIGIN),
             ],
             "connections": {},
         }
@@ -165,8 +166,8 @@ class WebhookRouteTests(unittest.TestCase):
     def test_method_is_case_insensitive_for_duplicates(self):
         wf = {
             "nodes": [
-                webhook("A", "post", "p", origins="https://x.test"),
-                webhook("B", "POST", "p", origins="https://x.test"),
+                webhook("A", "post", "p", origins=OK_ORIGIN),
+                webhook("B", "POST", "p", origins=OK_ORIGIN),
             ],
             "connections": {},
         }
@@ -177,7 +178,7 @@ class WebhookRouteTests(unittest.TestCase):
 class CredentialTests(unittest.TestCase):
     def test_empty_credential_id_passes(self):
         wf = good_workflow()
-        wf["nodes"][1]["credentials"] = {"notionApi": {"id": "", "name": "Select"}}
+        wf["nodes"][1]["credentials"] = {"notionApi": {"id": "", "name": "Select your Notion credential"}}
         errors, _ = vw.validate_workflow(wf)
         self.assertEqual(errors, [])
 
@@ -253,25 +254,147 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(errors, [])
 
 
-class WarningTests(unittest.TestCase):
-    def test_post_webhook_with_wildcard_origin_warns(self):
+class WildcardOriginTests(unittest.TestCase):
+    def test_wildcard_origin_is_an_error_on_post(self):
         wf = good_workflow()
         wf["nodes"][2]["parameters"]["options"]["allowedOrigins"] = "*"
-        errors, warnings = vw.validate_workflow(wf)
-        self.assertEqual(errors, [])
-        self.assertTrue(any("'Hook POST'" in w and "'*'" in w for w in warnings))
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("'Hook POST'" in e and "'*'" in e for e in errors))
 
-    def test_get_webhook_with_wildcard_origin_does_not_warn(self):
+    def test_wildcard_origin_is_an_error_on_get(self):
+        wf = good_workflow()
+        wf["nodes"][0]["parameters"]["options"]["allowedOrigins"] = "*"
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("'Hook GET'" in e for e in errors))
+
+    def test_wildcard_in_comma_list_is_an_error(self):
+        wf = good_workflow()
+        wf["nodes"][0]["parameters"]["options"]["allowedOrigins"] = OK_ORIGIN + ", *"
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("'*'" in e for e in errors))
+
+    def test_other_wildcard_option_is_an_error(self):
+        wf = good_workflow()
+        wf["nodes"][0]["parameters"]["options"]["responseHeaders"] = "*"
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("responseHeaders" in e for e in errors))
+
+    def test_wildcard_allowed_origins_outside_webhook_is_an_error(self):
+        wf = good_workflow()
+        wf["nodes"][1]["parameters"]["allowedOrigins"] = "*"
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("allowedOrigins is '*'" in e for e in errors))
+
+    def test_specific_placeholder_origin_passes(self):
         errors, warnings = vw.validate_workflow(good_workflow())
-        self.assertEqual(errors, [])
-        self.assertFalse(any("Hook GET" in w for w in warnings))
+        self.assertEqual((errors, warnings), ([], []))
 
-    def test_warnings_do_not_make_errors(self):
+
+class HostPlaceholderTests(unittest.TestCase):
+    def test_real_allowed_origin_fails(self):
         wf = good_workflow()
-        wf["nodes"][2]["parameters"]["options"]["allowedOrigins"] = "*"
-        errors, warnings = vw.validate_workflow(wf)
-        self.assertTrue(warnings)
+        wf["nodes"][2]["parameters"]["options"]["allowedOrigins"] = "https://dash.hightidewash.net"
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("allowedOrigins must use a REPLACE_WITH_*" in e for e in errors))
+        self.assertTrue(any("dash.hightidewash.net" in e for e in errors))
+
+    def test_real_host_in_code_string_fails(self):
+        wf = good_workflow()
+        wf["nodes"][1]["parameters"]["jsCode"] = "fetch('https://hightide.pages.dev/x')"
+        errors, _ = vw.validate_workflow(wf)
+        self.assertTrue(any("hightide.pages.dev" in e for e in errors))
+
+    def test_allowlisted_hosts_and_placeholders_pass(self):
+        wf = good_workflow()
+        wf["nodes"][1]["parameters"]["jsCode"] = (
+            "https://ops.hightidewash.net/webhook/jarvis/x https://api.anthropic.com/v1/messages "
+            "https://api.notion.com/v1/pages https://REPLACE_WITH_PAGES_DOMAIN "
+            "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/estimate"
+        )
+        errors, _ = vw.validate_workflow(wf)
         self.assertEqual(errors, [])
+
+
+class CredentialNameTests(unittest.TestCase):
+    def _wf(self, cred):
+        wf = good_workflow()
+        wf["nodes"][1]["credentials"] = {"notionApi": cred}
+        return wf
+
+    def test_placeholder_credentials_pass(self):
+        for cred in ({}, {"id": "", "name": "Select your Notion credential"}, {"name": "REPLACE_WITH_NOTION"}):
+            errors, _ = vw.validate_workflow(self._wf(cred))
+            self.assertEqual(errors, [], cred)
+
+    def test_absent_credentials_pass(self):
+        errors, _ = vw.validate_workflow(good_workflow())
+        self.assertEqual(errors, [])
+
+    def test_real_looking_name_fails(self):
+        errors, _ = vw.validate_workflow(self._wf({"id": "", "name": "Notion account (Joshua)"}))
+        self.assertTrue(any("looks real" in e for e in errors))
+
+    def test_non_empty_id_fails(self):
+        errors, _ = vw.validate_workflow(self._wf({"id": "abc123", "name": "Select your Notion credential"}))
+        self.assertTrue(any("credential id" in e for e in errors))
+
+    def test_non_object_credential_fails(self):
+        errors, _ = vw.validate_workflow(self._wf("realcred"))
+        self.assertTrue(any("not an object" in e for e in errors))
+
+
+class DocsTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = os.path.join(self.tmp.name, "n8n")
+        os.makedirs(self.dir)
+
+    def make(self, name, doc=None, readme=None):
+        path = os.path.join(self.dir, name)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(good_workflow(), handle)
+        if doc:
+            open(os.path.join(self.dir, doc), "w").write("doc")
+        if readme is not None:
+            open(os.path.join(self.dir, "README.md"), "w").write(readme)
+        return path
+
+    def test_mapping_covers_every_repo_workflow(self):
+        for path in vw.default_paths():
+            doc = vw.expected_doc(os.path.basename(path))
+            self.assertTrue(os.path.isfile(os.path.join(os.path.dirname(path), doc)), doc)
+
+    def test_expected_doc_mapping_and_fallback(self):
+        self.assertEqual(vw.expected_doc("router-workflow.json"), "ROUTER.md")
+        self.assertEqual(vw.expected_doc("jarvis-dashboard-api.json"), "CHAT.md")
+        self.assertEqual(vw.expected_doc("new-thing-workflow.json"), "NEW-THING.md")
+
+    def test_sibling_doc_and_readme_mention_pass(self):
+        path = self.make("router-workflow.json", "ROUTER.md", "see router-workflow.json")
+        self.assertEqual(vw.validate_file(path), ([], []))
+
+    def test_missing_sibling_doc_fails(self):
+        path = self.make("router-workflow.json", None, "router-workflow.json")
+        errors, _ = vw.validate_file(path)
+        self.assertTrue(any("missing sibling doc ROUTER.md" in e for e in errors))
+
+    def test_not_in_readme_is_reported(self):
+        path = self.make("router-workflow.json", "ROUTER.md", "nothing here")
+        errors, warnings = vw.validate_file(path)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("not mentioned in README.md" in w for w in warnings))
+
+    def test_doc_name_in_readme_counts_as_mention(self):
+        path = self.make("router-workflow.json", "ROUTER.md", "[Router](ROUTER.md)")
+        self.assertEqual(vw.validate_file(path), ([], []))
+
+    def test_docs_check_skipped_outside_n8n_dir(self):
+        other = os.path.join(self.tmp.name, "elsewhere")
+        os.makedirs(other)
+        path = os.path.join(other, "x-workflow.json")
+        json.dump(good_workflow(), open(path, "w"))
+        self.assertEqual(vw.validate_file(path), ([], []))
 
 
 class FileAndCliTests(unittest.TestCase):
@@ -309,9 +432,18 @@ class FileAndCliTests(unittest.TestCase):
         self.assertEqual(vw.main([good, bad]), 1)
 
     def test_cli_warnings_only_exit_zero(self):
+        d = os.path.join(self.dir, "n8n")
+        os.makedirs(d)
+        path = os.path.join(d, "router-workflow.json")
+        json.dump(good_workflow(), open(path, "w"))
+        open(os.path.join(d, "ROUTER.md"), "w").write("x")
+        open(os.path.join(d, "README.md"), "w").write("nothing")
+        self.assertEqual(vw.main([path]), 0)
+
+    def test_cli_wildcard_origin_exits_one(self):
         wf = good_workflow()
         wf["nodes"][2]["parameters"]["options"]["allowedOrigins"] = "*"
-        self.assertEqual(vw.main([self.write("warn.json", wf)]), 0)
+        self.assertEqual(vw.main([self.write("wild.json", wf)]), 1)
 
     def test_cli_prints_pass_and_fail_lines(self):
         import io

@@ -19,21 +19,33 @@ respond `needs_info`; otherwise create an Approvals row, log, respond `drafted`.
 Body: `{job_name, items:[{service, quantity}], notes}`. `items` must be a non-empty array and each
 `service` a non-empty string, otherwise HTTP 400 `{status:"error", error}`.
 - `{status:"needs_info", missing:[...]}`: unpriced items; total is withheld. Logged to Activity Log.
-- `{status:"drafted", estimate:{lines, subtotal, minimum_applied, minimum_charge, total, missing, warnings}}`:
+- `{status:"drafted", approval_id, estimate:{lines, subtotal, minimum_applied, minimum_charge, total, missing, warnings}}`:
   Approvals row created (Type Estimate, Status Awaiting Approval, QA Result Not checked).
-Money values are strings such as `"123.45"`.
+Money values are strings such as `"123.45"`. `approval_id` is the Notion page id of the new Approvals row.
+
+## Running QA (not chained automatically)
+No workflow calls QA for you. After a draft is created, run it by hand with the `approval_id` from the response:
+
+```
+curl -X POST https://<n8n-host>/webhook/jarvis/qa -H 'content-type: application/json' -d '{"approval_id":"<approval_id>"}'
+```
+(POST `/jarvis/qa`). Until then the Approvals row stays `QA Result: Not checked`.
 
 ## Approvals Draft format
 Draft = readable text for Makenzie, then a line `[estimate-json]`, then compact JSON in the section 2.5
 schema of `docs/design/router-and-estimator.md` (`rule_id` = Notion page id of the rule used, per-line
-`minimum_applied`, `needs_human: true`). QA parses the JSON after the marker. Notion rich-text items hold at
-most 2000 chars and the node writes one item, so the readable part is truncated first; the JSON never is
-(a very large estimate whose JSON alone exceeds ~1900 chars would need splitting into several rich-text chunks).
+`minimum_applied` (always false; the minimum is estimate-level), `needs_human: true`). QA parses the JSON after the marker. Notion rich-text items hold at
+most 2000 chars, so the `Chunk Draft` Code node splits the whole Draft (nothing truncated, `[estimate-json]` block included)
+into several rich_text items of <=1900 chars. The Notion node v2.2 `propertiesUi` rich_text takes a single string and could
+not be shown to emit multiple items, so `Create Approval` is an HTTP Request to `POST https://api.notion.com/v1/pages`
+(Notion-Version 2022-06-28, `notionApi` credential left empty). QA joins the chunks' `plain_text`.
 An Add-On with no main service is reported as missing.
 
 ## Rules (same as estimate.py)
 Case-insensitive service match; only Active rules; Flat Rate ignores quantity; Interior/Exterior minimum
-charge (highest one) applies to the main-service sum; Add-Ons are added after it; no guessing, so any
+charge (highest one) applies once to the combined main-service subtotal (one model, shared with QA): every line's
+`line_total` equals its `computed` amount, and `minimum_applied`, `minimum_charge` and `minimum_adjustment` are recorded at estimate level in the JSON
+(`total` = sum of line_totals + adjustment); Add-Ons are added after it; no guessing, so any
 missing rate, quantity or rule leaves `total` null.
 
 ## Not verified

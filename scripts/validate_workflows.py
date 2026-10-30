@@ -14,10 +14,14 @@ Checks (stdlib only):
   * every connection source and target names an existing node
   * every non-webhook node is reachable from some Webhook or Schedule/other trigger node
   * (method, path) pairs of webhooks are unique
-  * no node has a non-empty credentials id
+  * no node has a non-empty credentials id, and credential names must be placeholders
+    ('Select your ... credential', 'REPLACE_WITH_*' or empty)
+  * webhook options (allowedOrigins etc.) are never '*'; allowedOrigins must be a REPLACE_WITH_* placeholder
+  * URLs use REPLACE_WITH_* hosts, except the allowlisted ops/api hosts
+  * each workflow has a sibling .md in dashboard/n8n (error) and is mentioned in
+    dashboard/n8n/README.md (warning, since only the dashboard workflow is listed today)
   * no string anywhere matches a secret pattern
   * no 'password' / 'api_key' key has a non-empty value
-  * warn: POST webhooks with allowedOrigins exactly '*'
 """
 
 import glob
@@ -37,6 +41,26 @@ SECRET_PATTERNS = [
     ("Notion token", re.compile(r"ntn_[A-Za-z0-9]{10,}")),
     ("Bearer token", re.compile(r"Bearer [A-Za-z0-9._-]{15,}")),
 ]
+
+# Workflow file -> sibling doc (inside dashboard/n8n). Files not listed fall back to
+# '<stem minus -workflow>.upper() + .md'.
+WORKFLOW_DOCS = {
+    "approvals-api-workflow.json": "APPROVALS-API.md",
+    "conductor-workflow.json": "CONDUCTOR.md",
+    "estimator-workflow.json": "ESTIMATOR.md",
+    "intake-workflow.json": "INTAKE.md",
+    "jarvis-dashboard-api.json": "CHAT.md",
+    "marketer-workflow.json": "MARKETER.md",
+    "qa-workflow.json": "QA.md",
+    "router-workflow.json": "ROUTER.md",
+    "shield-ops-workflow.json": "SHIELD-OPS.md",
+    "support-workflow.json": "SUPPORT.md",
+}
+
+PLACEHOLDER_RE = re.compile(r"REPLACE_WITH_[A-Z0-9_]+")
+CREDENTIAL_NAME_OK = re.compile(r"^(select your .*|replace_with_.*)$", re.IGNORECASE)
+URL_RE = re.compile(r"(?i)\b(?:https?|wss?)://([^\s/\"'`)\\<>]+)")
+ALLOWED_HOSTS = {"ops.hightidewash.net", "api.anthropic.com", "api.notion.com"}
 
 SECRET_KEY_MARKERS = ("password", "apikey")
 
@@ -85,6 +109,36 @@ def _scan_secrets(obj, path, errors):
             match = pattern.search(obj)
             if match:
                 errors.append(f"{path}: string looks like a {label} ({_redact(match.group(0))})")
+
+
+def _scan_hosts(obj, path, errors):
+    """Every URL host must be a REPLACE_WITH_* placeholder or an allowlisted host."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            _scan_hosts(value, f"{path}.{key}", errors)
+    elif isinstance(obj, list):
+        for index, value in enumerate(obj):
+            _scan_hosts(value, f"{path}[{index}]", errors)
+    elif isinstance(obj, str):
+        for match in URL_RE.finditer(obj):
+            host = match.group(1)
+            bare = host.split("@")[-1].split(":")[0].lower()
+            if PLACEHOLDER_RE.search(host) or bare in ALLOWED_HOSTS:
+                continue
+            errors.append(f"{path}: URL host '{host}' must be a REPLACE_WITH_* placeholder")
+
+
+def _scan_wildcard_origins(obj, path, errors):
+    """Any allowedOrigins key anywhere (not just on webhook nodes) must not be '*'."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key == "allowedOrigins" and isinstance(value, str) and "*" in [p.strip() for p in value.split(",")]:
+                if not path.endswith(".options") or "parameters" not in path:
+                    errors.append(f"{path}.allowedOrigins is '*'")
+            _scan_wildcard_origins(value, f"{path}.{key}", errors)
+    elif isinstance(obj, list):
+        for index, value in enumerate(obj):
+            _scan_wildcard_origins(value, f"{path}[{index}]", errors)
 
 
 def _webhook_methods(params):
@@ -198,8 +252,17 @@ def validate_workflow(data):
                 route_owner[key] = node["name"]
 
         options = params.get("options") if isinstance(params.get("options"), dict) else {}
-        if options.get("allowedOrigins") == "*" and "POST" in _webhook_methods(params):
-            warnings.append(f"POST webhook '{node['name']}' (/{path}) allows origins '*'")
+        for opt_key, opt_value in options.items():
+            if isinstance(opt_value, str) and "*" in [p.strip() for p in opt_value.split(",")]:
+                errors.append(f"webhook '{node['name']}' (/{path}) option '{opt_key}' is '*'")
+        origins = options.get("allowedOrigins")
+        if origins is not None and not (
+            isinstance(origins, str) and all(PLACEHOLDER_RE.search(o) for o in origins.split(",") if o.strip())
+            and origins.strip()
+        ) and origins != "*":
+            errors.append(
+                f"webhook '{node['name']}' (/{path}) allowedOrigins must use a REPLACE_WITH_* placeholder"
+            )
 
     # Credentials: no node may reference a credential id.
     for node in valid_nodes:
@@ -210,10 +273,49 @@ def validate_workflow(data):
             cred_id = cred.get("id") if isinstance(cred, dict) else None
             if cred_id is not None and str(cred_id).strip():
                 errors.append(f"node '{node['name']}' has a credential id for '{cred_type}'")
+            cred_name = cred.get("name") if isinstance(cred, dict) else None
+            if cred_name is not None and str(cred_name).strip() and not CREDENTIAL_NAME_OK.match(str(cred_name).strip()):
+                errors.append(
+                    f"node '{node['name']}' has a credential name for '{cred_type}' that looks real"
+                )
+            if not isinstance(cred, dict):
+                errors.append(f"node '{node['name']}' credential '{cred_type}' is not an object")
 
     # Secrets anywhere in the document.
     _scan_secrets(data, "$", errors)
+    _scan_hosts(data, "$", errors)
+    _scan_wildcard_origins(data, "$", errors)
 
+    return errors, warnings
+
+
+def expected_doc(filename):
+    """Sibling .md name for a workflow JSON file name."""
+    if filename in WORKFLOW_DOCS:
+        return WORKFLOW_DOCS[filename]
+    stem = filename[:-5] if filename.endswith(".json") else filename
+    if stem.endswith("-workflow"):
+        stem = stem[: -len("-workflow")]
+    return stem.upper() + ".md"
+
+
+def check_docs(path):
+    """Docs checks for a file living in a directory named 'n8n'. Returns (errors, warnings)."""
+    errors, warnings = [], []
+    directory = os.path.dirname(os.path.abspath(path))
+    filename = os.path.basename(path)
+    doc = expected_doc(filename)
+    if not os.path.isfile(os.path.join(directory, doc)):
+        errors.append(f"missing sibling doc {doc} for {filename}")
+    readme = os.path.join(directory, "README.md")
+    try:
+        with open(readme, encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        warnings.append("README.md not found next to workflow")
+        return errors, warnings
+    if filename not in text and doc not in text:
+        warnings.append(f"{filename} is not mentioned in README.md")
     return errors, warnings
 
 
@@ -226,7 +328,12 @@ def validate_file(path):
         return [f"cannot read file: {exc.strerror or exc}"], []
     except json.JSONDecodeError as exc:
         return [f"invalid JSON: {exc}"], []
-    return validate_workflow(data)
+    errors, warnings = validate_workflow(data)
+    if os.path.basename(os.path.dirname(os.path.abspath(path))) == "n8n":
+        doc_errors, doc_warnings = check_docs(path)
+        errors += doc_errors
+        warnings += doc_warnings
+    return errors, warnings
 
 
 def default_paths():

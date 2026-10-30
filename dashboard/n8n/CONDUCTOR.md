@@ -28,3 +28,8 @@ enforced again in the "Finalize brief" Code node).
 3. Select an Anthropic credential on "Anthropic Conductor".
 4. Replace `https://REPLACE_WITH_DASHBOARD_ORIGIN` in the webhook options.
 5. Confirm the workflow timezone is America/New_York, then activate.
+
+## Activity window and failure handling
+- The Activity Log fetch sorts by the `Timestamp` property descending (Notion v2.2 sort option, confirm on first import) and fetches 100 rows. The Code node also sorts deterministically, so the window is correct even if the Notion sort is ignored.
+- Shield/Ops housekeeping rows and the Conductor's own `Daily brief` rows are excluded before the 25-row window is taken.
+- The Anthropic node has `onError: continueRegularOutput`, 3 tries, 2000 ms between tries. If the call still fails or returns no text, "Finalize brief" writes a plain non-LLM brief built from the raw summary (flagged jobs, recent activity, open job counts) so a brief is still logged.
