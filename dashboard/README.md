@@ -20,3 +20,12 @@ The browser calls these cross-origin, so enable CORS on the n8n Webhook nodes (a
 ## Notes
 - Estimate Rules table is empty until the Notion DB has rows (shows an empty state).
 - The wave background is a lightweight canvas stand-in; the planned React + Three.js scene can replace it.
+
+## Deploy to Cloudflare Pages (needs your Cloudflare account)
+1. Cloudflare dashboard → Workers & Pages → Create → Pages → Connect to Git → `joshspicy2/jarvis-llm-connector`.
+2. Production branch `main` (after the PR merges). Framework preset: None. Build command: *(empty)*. Build output directory: `dashboard`.
+3. `_headers` is applied automatically: strict CSP (only this origin and `https://ops.hightidewash.net` for data), no framing, no referrer.
+   If you change the n8n hostname, update `connect-src` in `_headers` and `N8N_BASE` in `config.js`.
+4. Protect it: Zero Trust → Access → Applications → add the Pages domain (and `ops.hightidewash.net/webhook/jarvis/*`) with an allow-list policy for your email(s).
+   Then set the n8n Webhook nodes' Allowed Origins to the Pages domain.
+Note: when Access protects the webhooks, the browser must be signed in to Access; cross-site cookies may need the webhook behind the same parent domain (e.g. serve the dashboard at `jarvis.hightidewash.net`).
