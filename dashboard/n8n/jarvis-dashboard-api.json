@@ -1,0 +1,767 @@
+{
+ "name": "Jarvis Dashboard API",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/pipeline",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "Pipeline GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-pipelineget"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "4d7129a9-91f4-410b-a2b1-24e659ee7d51",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {}
+   },
+   "name": "Notion Pipeline",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    0
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst stages = {};\nfor (const it of $input.all()) { const p = it.json;\n  const stage = find(p,/^(stage|status)$/i) || \"Unsorted\";\n  (stages[stage] = stages[stage] || []).push({ title: titleOf(p) || \"(untitled)\", sub: [find(p,/(town|city|location)/i), find(p,/(service|type)/i)].filter(Boolean).join(\" \u00b7 \") }); }\nreturn [{ json: { body: { stages: Object.entries(stages).map(([name,cards])=>({name,cards})) } } }];"
+   },
+   "name": "Shape Pipeline",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Pipeline",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/estimate-rules",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "Rules GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    200
+   ],
+   "webhookId": "jarvis-estimate-rulesget"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_ESTIMATE_RULES_DATABASE_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {}
+   },
+   "name": "Notion Rules",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    200
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst rows = $input.all().filter(i=>i.json.id).map(i=>({ service: titleOf(i.json), base: find(i.json,/(price|base|rate)/i), unit: find(i.json,/unit/i), notes: find(i.json,/note/i) }));\nreturn [{ json: { body: rows } }];"
+   },
+   "name": "Shape Rules",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Rules",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/war-mode",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "War GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    400
+   ],
+   "webhookId": "jarvis-war-modeget"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_SYSTEM_FLAGS_DATABASE_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {}
+   },
+   "name": "Notion Flags (read)",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    400
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst row = $input.all().find(i=>i.json.id && /war/i.test(titleOf(i.json)));\nconst on = row ? Object.values(row.json.properties).some(v=>v.type===\"checkbox\" && v.checkbox) : false;\nreturn [{ json: { body: { enabled: on } } }];"
+   },
+   "name": "Shape War",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    400
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond War",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    400
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/war-mode",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "War POST",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    600
+   ],
+   "webhookId": "jarvis-war-modepost"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_SYSTEM_FLAGS_DATABASE_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {}
+   },
+   "name": "Notion Flags (find)",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    600
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst want = $('War POST').first().json.body.enabled === true;\nconst row = $input.all().find(i=>i.json.id && /war/i.test(titleOf(i.json)));\nif (!row) throw new Error(\"No War Mode row found in System Flags\");\nreturn [{ json: { pageId: row.json.id, enabled: want } }];"
+   },
+   "name": "Pick War Row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.pageId }}",
+     "mode": "id"
+    },
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Enabled|checkbox",
+       "checkboxValue": "={{ $json.enabled }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Notion Update War",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    660,
+    600
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "return [{ json: { body: { enabled: $(\"Pick War Row\").first().json.enabled } } }];"
+   },
+   "name": "Shape War Saved",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond War Saved",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1100,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/activity-log",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "Log GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    800
+   ],
+   "webhookId": "jarvis-activity-logget"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_AGENT_ACTIVITY_LOG_DATABASE_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {}
+   },
+   "name": "Notion Log",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    800
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst rows = $input.all().filter(i=>i.json.id).sort((a,b)=>new Date(a.json.created_time)-new Date(b.json.created_time)).slice(-25)\n .map(i=>({ t: new Date(i.json.created_time).toLocaleTimeString(\"en-US\",{hour12:false,timeZone:\"America/New_York\"}), text: [find(i.json,/^agent$/i), titleOf(i.json)].filter(Boolean).join(\": \") }));\nreturn [{ json: { body: rows } }];"
+   },
+   "name": "Shape Log",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    800
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Log",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    800
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/agents",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "Agents GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    1000
+   ],
+   "webhookId": "jarvis-agentsget"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_AGENT_ACTIVITY_LOG_DATABASE_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {}
+   },
+   "name": "Notion Log (agents)",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    1000
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst props = p => p.properties || {};\nconst text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\")\n  : v.select ? (v.select.name||\"\") : v.status ? (v.status.name||\"\") : v.number!=null ? String(v.number) : v.checkbox!=null ? String(v.checkbox) : \"\";\nconst titleOf = p => { for (const k in props(p)) if (props(p)[k].type===\"title\") return text(props(p)[k]); return \"\"; };\nconst find = (p, re) => { for (const k in props(p)) if (re.test(k)) return text(props(p)[k]); return \"\"; };\n\nconst names = [\"Router\",\"Estimate\",\"Scheduling\",\"Finance\",\"Content\",\"Integrator\"];\nconst last = {};\nfor (const i of $input.all().filter(i=>i.json.id)) { const a = find(i.json,/^agent$/i); if (!a) continue;\n  const t = new Date(i.json.created_time); if (!last[a] || t > last[a].t) last[a] = { t, text: titleOf(i.json), status: find(i.json,/^status$/i).toLowerCase() }; }\nconst out = names.map(n => { const l = last[n]; if (!l) return { name:n, status:\"idle\", detail:\"no activity yet\" };\n  const recent = Date.now() - l.t < 10*60*1000; const st = /await|wait|approval/.test(l.status) ? \"waiting\" : /fail|error/.test(l.status) ? \"error\" : recent ? \"active\" : \"idle\";\n  return { name:n, status:st, detail:l.text }; });\nreturn [{ json: { body: out } }];"
+   },
+   "name": "Shape Agents",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    1000
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Agents",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    1000
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/chat",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "*"
+    }
+   },
+   "name": "Chat POST",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    1200
+   ],
+   "webhookId": "jarvis-chatpost"
+  },
+  {
+   "parameters": {
+    "jsCode": "return [{ json: { body: { reply: \"Chat is received but not yet wired to the Router agent.\" } } }];"
+   },
+   "name": "Chat stub",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    1200
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Chat",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    1200
+   ]
+  }
+ ],
+ "connections": {
+  "Pipeline GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Pipeline",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Pipeline": {
+   "main": [
+    [
+     {
+      "node": "Shape Pipeline",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape Pipeline": {
+   "main": [
+    [
+     {
+      "node": "Respond Pipeline",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Rules GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Rules",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Rules": {
+   "main": [
+    [
+     {
+      "node": "Shape Rules",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape Rules": {
+   "main": [
+    [
+     {
+      "node": "Respond Rules",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "War GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Flags (read)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Flags (read)": {
+   "main": [
+    [
+     {
+      "node": "Shape War",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape War": {
+   "main": [
+    [
+     {
+      "node": "Respond War",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "War POST": {
+   "main": [
+    [
+     {
+      "node": "Notion Flags (find)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Flags (find)": {
+   "main": [
+    [
+     {
+      "node": "Pick War Row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pick War Row": {
+   "main": [
+    [
+     {
+      "node": "Notion Update War",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Update War": {
+   "main": [
+    [
+     {
+      "node": "Shape War Saved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape War Saved": {
+   "main": [
+    [
+     {
+      "node": "Respond War Saved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Log": {
+   "main": [
+    [
+     {
+      "node": "Shape Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape Log": {
+   "main": [
+    [
+     {
+      "node": "Respond Log",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Agents GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Log (agents)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Log (agents)": {
+   "main": [
+    [
+     {
+      "node": "Shape Agents",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape Agents": {
+   "main": [
+    [
+     {
+      "node": "Respond Agents",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Chat POST": {
+   "main": [
+    [
+     {
+      "node": "Chat stub",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Chat stub": {
+   "main": [
+    [
+     {
+      "node": "Respond Chat",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
