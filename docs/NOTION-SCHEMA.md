@@ -144,7 +144,7 @@ CREATE TABLE ("Title" TITLE,
   "Decided By" SELECT('Makenzie':pink,'Joshua':blue),
   "Decided At" DATE)
 ```
-Untested against the live workspace (no access from this session); fix any dialect error before running.
+**Created 2026-10-30** under the Jarvis hub page by this exact statement (it ran without dialect errors). Database ID `a807f4c25dfe4ce388626726b7d99f6d`, data source `collection://225d1768-7fc0-4d50-8b88-cd973cce7dec`. Still to do by hand: the views below, and sharing it with the n8n integration.
 After creating: share the database with the n8n Notion integration and record its ID in the workflow JSON.
 
 ### Pages and views

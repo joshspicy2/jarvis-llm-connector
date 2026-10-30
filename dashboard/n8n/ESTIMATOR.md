@@ -11,7 +11,7 @@ respond `needs_info`; otherwise create an Approvals row, log, respond `drafted`.
 1. n8n: Workflows -> Import from File -> `estimator-workflow.json`.
 2. Pick your Notion credential on each Notion node (shipped empty). Share the integration with the
    Estimate Rules, Agent Activity Log and Approvals databases.
-3. In `Create Approval`, replace `REPLACE_WITH_APPROVALS_DATABASE_ID` with the real database ID.
+3. In `Create Approval`, replace `a807f4c25dfe4ce388626726b7d99f6d` with the real database ID.
 4. In `Estimate Webhook` > Options, replace `https://REPLACE_WITH_DASHBOARD_ORIGIN` (never `*`).
 5. Activate, then call the production URL.
 

@@ -35,7 +35,7 @@ Files this runbook depends on. Some are written by other agents and may not exis
 7. **Replace placeholders.** Search each workflow for `REPLACE_WITH_`:
    `https://REPLACE_WITH_DASHBOARD_ORIGIN` (dashboard API, 7 Webhook nodes) and
    `https://REPLACE_WITH_PAGES_DOMAIN` (Router `Inbound Webhook`) -> your dashboard origin (planned
-   `https://jarvis.hightidewash.net`). Never `*`. Also `REPLACE_WITH_APPROVALS_DATABASE_ID` (agent workflows that write Approvals) -> the ID of the Approvals database from step 3.
+   `https://jarvis.hightidewash.net`). Never `*`. The Approvals database ID (`a807f4c25dfe4ce388626726b7d99f6d`) is already filled into the workflows that write Approvals; if you recreate the database, replace it everywhere.
    Quick check on your PC: `grep -rn REPLACE_WITH_ dashboard/n8n/` should show only repo copies; in n8n, open the
    Webhook nodes and confirm none still contain it.
 8. **System Flags row.** A row whose `Flag` contains "War" must exist (checkbox `Value`). Create it, unchecked.

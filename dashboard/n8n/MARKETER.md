@@ -22,7 +22,7 @@ No invented claims, prices, testimonials, before/after results, client names or 
 ## Enabling (disabled by default)
 The Webhook node ships with `disabled: true`. Once ops are stable:
 1. Import into n8n and attach Notion and Anthropic credentials (placeholders are empty).
-2. Replace `REPLACE_WITH_APPROVALS_DATABASE_ID` and `REPLACE_WITH_DASHBOARD_ORIGIN`.
+2. Replace `a807f4c25dfe4ce388626726b7d99f6d` and `REPLACE_WITH_DASHBOARD_ORIGIN`.
 3. Open the Webhook node, turn off Disable, then activate the workflow.
 
 ## War Mode

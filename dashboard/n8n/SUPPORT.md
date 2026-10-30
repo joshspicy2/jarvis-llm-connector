@@ -20,7 +20,7 @@ Success returns `{status:"drafted", approval_id, needs_human, reason}`.
 6. Log to the Agent Activity Log (Agent `Support`), then respond.
 
 ## Setup
-- Replace `REPLACE_WITH_APPROVALS_DATABASE_ID` and the webhook origin `https://REPLACE_WITH_DASHBOARD_ORIGIN`.
+- Replace `a807f4c25dfe4ce388626726b7d99f6d` and the webhook origin `https://REPLACE_WITH_DASHBOARD_ORIGIN`.
 - Select the Notion and Anthropic credentials in n8n (left empty in the file).
 - Add `Support` to the Agent Activity Log `Agent` select, and `Support` to the Approvals `Agent` select.
 

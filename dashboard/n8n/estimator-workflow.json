@@ -219,7 +219,7 @@
     "operation": "create",
     "databaseId": {
      "__rl": true,
-     "value": "REPLACE_WITH_APPROVALS_DATABASE_ID",
+     "value": "a807f4c25dfe4ce388626726b7d99f6d",
      "mode": "id"
     },
     "title": "={{ 'Estimate: ' + $('Validate Request').first().json.job_name }}",
