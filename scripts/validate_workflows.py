@@ -12,7 +12,7 @@ Checks (stdlib only):
   * file is valid JSON and has 'nodes' (list) and 'connections' (object)
   * every node has a unique non-empty name and a type
   * every connection source and target names an existing node
-  * every non-webhook node is reachable from some Webhook node
+  * every non-webhook node is reachable from some Webhook or Schedule/other trigger node
   * (method, path) pairs of webhooks are unique
   * no node has a non-empty credentials id
   * no string anywhere matches a secret pattern
@@ -28,6 +28,8 @@ import sys
 from collections import deque
 
 WEBHOOK_TYPE = "n8n-nodes-base.webhook"
+# Other entry points (not reachable from a webhook by design).
+TRIGGER_TYPES = {"n8n-nodes-base.scheduleTrigger", "n8n-nodes-base.cron", "n8n-nodes-base.manualTrigger", "n8n-nodes-base.errorTrigger"}
 
 SECRET_PATTERNS = [
     ("OpenAI-style key", re.compile(r"sk-[A-Za-z0-9]{10,}")),
@@ -166,9 +168,10 @@ def validate_workflow(data):
     # Webhooks: reachability and (method, path) uniqueness.
     webhook_nodes = [n for n in valid_nodes if n.get("type") == WEBHOOK_TYPE]
     webhook_names = {n["name"] for n in webhook_nodes}
+    root_names = webhook_names | {n["name"] for n in valid_nodes if n.get("type") in TRIGGER_TYPES}
 
-    queue = deque(webhook_names)
-    reached = set(webhook_names)
+    queue = deque(root_names)
+    reached = set(root_names)
     while queue:
         current = queue.popleft()
         for nxt in edges.get(current, ()):
@@ -177,7 +180,7 @@ def validate_workflow(data):
                 queue.append(nxt)
     for node in valid_nodes:
         if node.get("type") != WEBHOOK_TYPE and node["name"] not in reached:
-            errors.append(f"node '{node['name']}' is not reachable from any Webhook node")
+            errors.append(f"node '{node['name']}' is not reachable from any Webhook or trigger node")
 
     route_owner = {}
     for node in webhook_nodes:

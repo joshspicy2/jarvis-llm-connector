@@ -112,6 +112,12 @@ class ReachabilityTests(unittest.TestCase):
         errors, _ = vw.validate_workflow(wf)
         self.assertEqual(errors, [])
 
+    def test_schedule_trigger_counts_as_entry_point(self):
+        trig = {"name": "Every 15 min", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}}
+        wf = {"nodes": [trig, code("After trigger")], "connections": {"Every 15 min": link("After trigger")}}
+        errors, _ = vw.validate_workflow(wf)
+        self.assertEqual(errors, [])
+
     def test_node_fed_only_by_non_webhook_fails(self):
         wf = {
             "nodes": [code("Lonely A"), code("Lonely B")],

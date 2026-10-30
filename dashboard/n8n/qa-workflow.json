@@ -1,0 +1,325 @@
+{
+ "name": "Jarvis QA",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/qa",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Webhook QA",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-qa"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ typeof $json.body?.approval_id === 'string' && /^[0-9a-fA-F-]{32,36}$/.test($json.body.approval_id.trim()) }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Valid approval_id?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ error: 'approval_id (Notion page id string) is required' }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond 400",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    440,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "get",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.body.approval_id.trim() }}",
+     "mode": "id"
+    },
+    "simple": false
+   },
+   "name": "Notion Get Approval",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "688aa0475933473da807974ddf90cd3e",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "simple": false,
+    "options": {}
+   },
+   "name": "Notion Estimate Rules",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    660,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst approval = $('Notion Get Approval').first().json;\nconst rules = $('Notion Estimate Rules').all().map(i => i.json);\nconst P = approval.properties || {};\nconst rt = v => (v && (v.rich_text || v.title) || []).map(t => t.plain_text).join('');\nconst sel = v => (v && v.select && v.select.name) || '';\nconst type = sel(P['Type']);\nconst draft = rt(P['Draft']);\nconst context = rt(P['Title']) + '\\n' + rt(P['Related Job']);\nconst failures = [], manual = [];\nconst fail = (id, msg) => failures.push(id + ': ' + msg);\nconst norm = s => String(s || '').replace(/-/g, '').toLowerCase();\nconst key = s => String(s || '').trim().replace(/\\s+/g, ' ').toLowerCase();\nconst cents = n => Math.round((Number(n) + Number.EPSILON) * 100);\nconst isNum = n => typeof n === 'number' && isFinite(n);\nconst twoDp = n => isNum(n) && Math.abs(n * 100 - Math.round(n * 100)) < 1e-6;\n\nif (!draft.trim()) fail('EMPTY', 'Draft is empty');\n\nif (type === 'Estimate' && draft.trim()) {\n  const R = rules.map(r => {\n    const p = r.properties || {};\n    return { id: norm(r.id), service: rt(p['Service']), category: sel(p['Category']), unit: sel(p['Unit']),\n      base: p['Base Rate'] ? p['Base Rate'].number : null, min: p['Minimum Charge'] ? p['Minimum Charge'].number : null,\n      active: p['Active'] ? p['Active'].checkbox === true : false, notes: rt(p['Notes']) };\n  });\n  let d = null;\n  try {\n    const mk = draft.indexOf('[estimate-json]');\n    if (mk >= 0) {\n      d = JSON.parse(draft.slice(mk + '[estimate-json]'.length).trim());\n    } else {\n      const raw = draft.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n      const m = raw.match(/\\{[\\s\\S]*\\}/);\n      d = JSON.parse(m ? m[0] : raw);\n    }\n  } catch (e) { d = null; }\n  if (!d || typeof d !== 'object' || Array.isArray(d)) {\n    fail('E1', 'Draft is not a valid JSON object');\n  } else {\n    if (!['draft', 'needs_info'].includes(d.status)) fail('E1', 'status must be draft or needs_info');\n    if (!Array.isArray(d.line_items)) fail('E1', 'line_items missing or not a list');\n    if (!Array.isArray(d.missing_fields)) fail('E1', 'missing_fields missing or not a list');\n    if (!Array.isArray(d.rule_notes)) fail('E1', 'rule_notes missing or not a list');\n    const items = Array.isArray(d.line_items) ? d.line_items : [];\n    const used = [];\n    let sumLine = 0, primSum = 0, addSum = 0, maxMin = null, hasPrim = false, hasAdd = false, priced = true;\n    items.forEach((li, n) => {\n      const tag = 'line ' + (n + 1) + ' (' + (li && li.service) + ')';\n      if (!li || typeof li !== 'object') { fail('E1', tag + ' is not an object'); priced = false; return; }\n      for (const f of ['service', 'rule_id', 'category', 'unit', 'base_rate', 'quantity', 'computed', 'minimum_charge', 'line_total'])\n        if (li[f] === undefined || li[f] === null) fail('E1', tag + ' missing field ' + f);\n      const matches = R.filter(r => r.id === norm(li.rule_id));\n      if (!matches.length) { fail('E2', tag + ' rule_id not found in Estimate Rules'); priced = false; return; }\n      const r = matches[0];\n      if (!r.active) fail('E2', tag + ' rule is not Active');\n      if (key(r.service) !== key(li.service)) fail('E3', tag + ' service differs from rule \"' + r.service + '\"');\n      if (r.category !== li.category) fail('E3', tag + ' category differs from rule (' + r.category + ')');\n      if (r.unit !== li.unit) fail('E3', tag + ' unit differs from rule (' + r.unit + ')');\n      if (r.base === null || Number(li.base_rate) !== r.base) fail('E3', tag + ' base_rate differs from rule (' + r.base + ')');\n      if ((r.min === null ? 0 : r.min) !== Number(li.minimum_charge || 0)) fail('E3', tag + ' minimum_charge differs from rule (' + r.min + ')');\n      if (r.base === null) { priced = false; return; }\n      used.push(r);\n      const q = li.quantity;\n      if (!isNum(q) || q < 0) { fail('E4', tag + ' quantity is not a non-negative number'); priced = false; return; }\n      if (r.unit === 'Flat Rate' && q !== 1) fail('E4', tag + ' flat rate quantity must be 1');\n      const comp = cents(r.base * q) / 100;\n      if (!isNum(li.computed) || cents(li.computed) !== cents(comp)) fail('E5', tag + ' computed should be ' + comp.toFixed(2));\n      const isPrim = r.category === 'Interior' || r.category === 'Exterior';\n      let expLine = comp, minApplied = false;\n      if (isPrim && r.min !== null && comp < r.min) { expLine = r.min; minApplied = true; }\n      if (!isNum(li.line_total) || cents(li.line_total) !== cents(expLine)) fail('E5', tag + ' line_total should be ' + expLine.toFixed(2));\n      if (li.minimum_applied !== minApplied) fail('E5', tag + ' minimum_applied should be ' + minApplied);\n      for (const f of ['base_rate', 'computed', 'minimum_charge', 'line_total'])\n        if (isNum(li[f]) && !twoDp(li[f])) fail('E5', tag + ' ' + f + ' not rounded to 2 decimals');\n      sumLine += cents(li.line_total || 0);\n      if (isPrim) { hasPrim = true; primSum += cents(comp); if (r.min !== null && (maxMin === null || cents(r.min) > maxMin)) maxMin = cents(r.min); }\n      else { hasAdd = true; addSum += cents(comp); }\n    });\n    // E6 / E9 totals (estimate.py: minimum applies to the primary subtotal, add-ons excluded)\n    if (d.status === 'needs_info') {\n      if (d.subtotal !== null || d.total !== null) fail('E9', 'needs_info requires subtotal and total to be null');\n    } else if (d.status === 'draft') {\n      if (Array.isArray(d.missing_fields) && d.missing_fields.length) fail('E9', 'draft must have empty missing_fields');\n      if (!items.length) fail('E6', 'draft has no line items');\n      if (priced && items.length) {\n        const expSub = primSum + addSum;\n        const expTot = (hasPrim && maxMin !== null && primSum < maxMin ? maxMin : primSum) + addSum;\n        if (!isNum(d.total) || cents(d.total) !== expTot) fail('E6', 'total should be ' + (expTot / 100).toFixed(2) + ' (estimate.py rules)');\n        if (!isNum(d.subtotal) || (cents(d.subtotal) !== sumLine && cents(d.subtotal) !== expSub)) fail('E6', 'subtotal does not match the sum of lines');\n        if (isNum(d.total) && cents(d.total) !== sumLine) fail('E6', 'total does not equal the sum of line_totals');\n      }\n    }\n    if (hasAdd && !hasPrim) fail('E8', 'Add-On line(s) without an Interior/Exterior main service');\n    // E10 duplicate Active rules\n    const seen = new Set();\n    for (const r of used) {\n      const k = key(r.service);\n      if (seen.has(k)) continue;\n      seen.add(k);\n      if (R.filter(x => x.active && key(x.service) === k).length > 1) fail('E10', 'more than one Active rule matches \"' + r.service + '\"');\n    }\n    // E11 rule notes\n    const rn = (Array.isArray(d.rule_notes) ? d.rule_notes : []).map(x => typeof x === 'string' ? x : JSON.stringify(x)).join('\\n');\n    for (const r of used) if (r.notes && !rn.includes(r.notes.trim())) fail('E11', 'rule_notes missing Notes of \"' + r.service + '\"');\n    if (used.some(r => r.notes)) manual.push('E11: confirm conditions in rule Notes are satisfied or listed as missing');\n    if (d.needs_human !== true) fail('E14', 'needs_human must be true');\n    const clientText = JSON.stringify([d.assumptions, d.rule_notes, d.missing_fields]);\n    if (/sk-[A-Za-z0-9]{10,}|secret|password|api[_ -]?key|\\b(?:\\d[ -]?){13,16}\\b/i.test(clientText)) fail('E13', 'possible secret or card number in client-visible text');\n  }\n  manual.push('E4: quantities match the intake (sqft / rooms / hours)');\n  manual.push('E7: every requested service has a line or a missing_fields entry; no unrequested lines');\n  manual.push('E12: assumptions contain no facts absent from intake');\n  manual.push('E13: no internal rule-problem text in client-visible fields');\n} else if (type === 'Estimate') {\n  // empty draft already failed\n} else if (type === 'Reply' || type === 'Content') {\n  if (draft.trim() && draft.trim().length < 10) fail('R1', 'Draft is too short to be real content');\n  const ph = draft.match(/REPLACE_[A-Z0-9_]*|\\bTODO\\b|\\bTBD\\b|\\bFIXME\\b|lorem ipsum|\\[\\s*(?:name|insert|your|client)[^\\]]*\\]|\\{\\{[^}]*\\}\\}|<[A-Z_ ]{3,}>/i);\n  if (ph) fail('R2', 'placeholder text found: ' + ph[0]);\n  const money = draft.match(/\\$\\s?\\d[\\d,.]*|\\b\\d+(?:\\.\\d+)?\\s?%\\s*off\\b|\\bdiscounts?\\b|\\bcoupon\\b|\\bpromo(?:tion)? code\\b|\\bprice match\\b|\\bguarantee[sd]?\\b|\\bfree of charge\\b|\\bcomplimentary\\b/i);\n  if (money) fail('R3', 'price or discount commitment: ' + money[0]);\n  const ctx = context.toLowerCase();\n  const emails = draft.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi) || [];\n  for (const e of emails) if (!ctx.includes(e.toLowerCase())) fail('R4', 'email not found in item context: ' + e);\n  const digits = s => s.replace(/\\D/g, '').replace(/^1(?=\\d{10}$)/, '');\n  const ctxDigits = digits(context);\n  const phones = draft.match(/(?:\\+?1[\\s.-]?)?\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g) || [];\n  for (const ph2 of phones) if (!ctxDigits.includes(digits(ph2))) fail('R4', 'phone number not found in item context: ' + ph2);\n  manual.push('Tone, accuracy of facts and client-appropriateness need human review');\n} else {\n  fail('TYPE', 'Approval Type must be Estimate, Reply or Content (got \"' + type + '\")');\n}\nconst result = failures.length ? 'Fail' : 'Pass';\nreturn [{ json: { approval_id: approval.id, type, result, failures, manual_checks: manual } }];\n"
+   },
+   "name": "QA Checks",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.approval_id }}",
+     "mode": "id"
+    },
+    "simple": false,
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "QA Result|select",
+       "selectValue": "={{ $json.result }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Update QA Result",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1100,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'QA: ' + $('QA Checks').first().json.result + ' ' + $('QA Checks').first().json.approval_id }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'QA: ' + $('QA Checks').first().json.result + ' ' + $('QA Checks').first().json.approval_id }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "QA"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ JSON.stringify({ result: $('QA Checks').first().json.result, failures: $('QA Checks').first().json.failures, manual_checks: $('QA Checks').first().json.manual_checks }).slice(0, 1900) }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log to Agent Activity",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1320,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ result: $('QA Checks').first().json.result, failures: $('QA Checks').first().json.failures, manual_checks: $('QA Checks').first().json.manual_checks }) }}",
+    "options": {}
+   },
+   "name": "Respond QA",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1540,
+    0
+   ]
+  }
+ ],
+ "connections": {
+  "Webhook QA": {
+   "main": [
+    [
+     {
+      "node": "Valid approval_id?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Valid approval_id?": {
+   "main": [
+    [
+     {
+      "node": "Notion Get Approval",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond 400",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Get Approval": {
+   "main": [
+    [
+     {
+      "node": "Notion Estimate Rules",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Estimate Rules": {
+   "main": [
+    [
+     {
+      "node": "QA Checks",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "QA Checks": {
+   "main": [
+    [
+     {
+      "node": "Update QA Result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Update QA Result": {
+   "main": [
+    [
+     {
+      "node": "Log to Agent Activity",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log to Agent Activity": {
+   "main": [
+    [
+     {
+      "node": "Respond QA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
