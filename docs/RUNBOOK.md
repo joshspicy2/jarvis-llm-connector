@@ -182,8 +182,8 @@ check Agents for `error`; glance at the badge.
   read it on every event. ON: only FIRE-severity items interrupt a human; everything else is queued for the
   daily brief (`needs_human` false, `queued_for_brief` true). It never changes severity, only who gets
   interrupted. It does not stop drafts or approvals. Unreadable flag: the design
-  (`docs/design/router-and-estimator.md`) says treat as ON but still send FIRE. In the current JSON only the Router
-  does this (missing War Mode row => ON). Conductor and Shield/Ops default to OFF when the row is missing, and a
+  (`docs/design/router-and-estimator.md`) says treat as ON but still send FIRE. The Router, Conductor and Shield/Ops
+  all do this (missing War Mode row => ON), and the dashboard chat reports it as UNKNOWN (treat as ON). A
   failed Notion read stops the node (see `docs/TROUBLESHOOTING.md`). Treat these defaults as unverified until run.
 - **Who flips it:** Joshua (dashboard toggle or the Notion checkbox directly). Shield/Ops may recommend it;
   treat any automatic flipping as not yet built unless its workflow `.md` says otherwise.

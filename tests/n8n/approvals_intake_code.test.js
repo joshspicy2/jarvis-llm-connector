@@ -382,9 +382,9 @@ describe('Dashboard API: Build Chat Prompt', () => {
   test('nodes use simple:false', () => {
     for (const n of ['Notion Pipeline (chat)', 'Notion Flags (chat)', 'Notion Log (chat)']) assert.equal(node(dash, n).parameters.simple, false);
   });
-  test('empty everything: War OFF, (none) placeholders, message included', () => {
+  test('empty everything: War UNKNOWN, (none) placeholders, message included', () => {
     const c = build();
-    assert.match(c, /War Mode: OFF/);
+    assert.match(c, /War Mode: UNKNOWN/);
     assert.match(c, /Open jobs \(not Paid, max 30\):\n\(none\)/);
     assert.match(c, /newest first\):\n\(none\)/);
     assert.match(c, /STAFF QUESTION[^\n]*\nstatus\?$/);
@@ -406,10 +406,10 @@ describe('Dashboard API: Build Chat Prompt', () => {
   test('War Mode flag ON/OFF parsing, case-insensitive, trimmed; other flags ignored', () => {
     assert.match(build({ flags: [flag('f', ' war mode ', true)] }), /War Mode: ON/);
     assert.match(build({ flags: [flag('f', 'War Mode', false)] }), /War Mode: OFF/);
-    assert.match(build({ flags: [flag('f', 'Quiet Hours', true)] }), /War Mode: OFF/);
+    assert.match(build({ flags: [flag('f', 'Quiet Hours', true)] }), /War Mode: UNKNOWN/);
   });
-  test('missing War Mode row reads as OFF here (note: Router treats unreadable as ON)', () => {
-    assert.match(build({ flags: [] }), /War Mode: OFF/);
+  test('missing War Mode row reads as UNKNOWN (treat as ON), matching the Router', () => {
+    assert.match(build({ flags: [] }), /War Mode: UNKNOWN \(flag row missing; treat as ON\)/);
   });
   test('log: newest first, max 10, notes truncated to 200, falls back to created_time', () => {
     const logs = Array.from({ length: 12 }, (_, i) => log('l' + i, 'T' + i, { ts: `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00Z`, notes: i === 11 ? 'n'.repeat(500) : '' }));

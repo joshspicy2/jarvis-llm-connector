@@ -115,8 +115,8 @@ These two are written from n8n conventions and docs, not from a live run.
     exactly `War Mode` (case-insensitive), checkbox `Value`. A missing row or wrong title leaves it ON. A hard
     failure of the `Notion System Flags` node (no output) is not caught by the Code node; the node has
     `alwaysOutputData`, which should let the loop run with no items, so the result would be ON (*unverified*).
-  - Conductor and Shield/Ops: start `war = false`. A missing row reads as OFF there, which disagrees with the design
-    (noted in `docs/reviews/workflows-qa-review.md` M9). Shield/Ops only reports the flag.
+  - Conductor and Shield/Ops: start `war = true` like the Router, so a missing row reads as ON (fixed; was
+    `docs/reviews/workflows-qa-review.md` M9). Shield/Ops only reports the flag. Dashboard chat shows UNKNOWN.
   - Dashboard `GET /jarvis/war-mode`: the badge shows `War Mode: unknown` and the toggle is disabled when the read fails.
 - Consequences: if everything seems to be queued for the daily brief (`queued_for_brief: true`, `needs_human: false`
   on non-FIRE items), check the System Flags row before assuming War Mode is really on: row titled exactly
