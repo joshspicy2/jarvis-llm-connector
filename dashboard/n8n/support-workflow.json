@@ -180,11 +180,15 @@
      "id": "",
      "name": "Select your Anthropic credential"
     }
-   }
+   },
+   "onError": "continueRegularOutput",
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 2000
   },
   {
    "parameters": {
-    "jsCode": "\nlet r;\ntry {\n  let raw = ($json.content?.[0]?.text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  const o = JSON.parse(m ? m[0] : raw);\n  if (typeof o.reply !== 'string' || !o.reply.trim()) throw new Error('no reply');\n  r = { reply: o.reply.trim(), needs_human: o.needs_human === true, reason: String(o.reason || '') };\n} catch (e) {\n  r = { reply: '', needs_human: true, reason: 'Support output could not be parsed; a human should write this reply.' };\n}\nconst c = $('Build context').first().json;\nr.client_name = c.client_name;\nr.job_name = c.job_name || '';\nr.title = 'Reply to ' + c.client_name + (c.job_name ? ' (' + c.job_name + ')' : '');\nreturn [{ json: r }];\n"
+    "jsCode": "\nlet r;\ntry {\n  let raw = ($json.content?.[0]?.text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  const o = JSON.parse(m ? m[0] : raw);\n  if (typeof o.reply !== 'string' || !o.reply.trim()) throw new Error('no reply');\n  r = { reply: o.reply.trim(), needs_human: o.needs_human === true, reason: String(o.reason || '') };\n} catch (e) {\n  r = { reply: '', needs_human: true, reason: ($json.error ? 'Anthropic request failed after retries; a human should write this reply.' : 'Support output could not be parsed; a human should write this reply.') };\n}\nr.has_draft = r.reply.trim().length > 0;\nconst c = $('Build context').first().json;\nr.client_name = c.client_name;\nr.job_name = c.job_name || '';\nr.title = 'Reply to ' + c.client_name + (c.job_name ? ' (' + c.job_name + ')' : '');\nreturn [{ json: r }];\n"
    },
    "name": "Parse reply",
    "type": "n8n-nodes-base.code",
@@ -196,53 +200,45 @@
   },
   {
    "parameters": {
-    "resource": "databasePage",
-    "operation": "create",
-    "databaseId": {
-     "__rl": true,
-     "value": "a807f4c25dfe4ce388626726b7d99f6d",
-     "mode": "id"
-    },
-    "title": "={{ $('Parse reply').first().json.title }}",
-    "propertiesUi": {
-     "propertyValues": [
+    "jsCode": "const p = $('Parse reply').first().json;\nconst TITLE = p.title, AGENT = 'Support', TYPE = 'Reply', DRAFT = p.reply, RELATED = p.job_name;\n\n// Notion rich-text items hold at most 2000 chars, so Draft is written as several rich_text items of <=1900 chars.\n// Concatenating the items' plain_text (what QA does) gives back the exact original text. Nothing is truncated.\nconst MAX = 1900;\nconst chunk = (s) => {\n  const out = [];\n  let i = 0;\n  while (i < s.length) {\n    let end = Math.min(i + MAX, s.length);\n    if (end < s.length) { const c = s.charCodeAt(end - 1); if (c >= 0xD800 && c <= 0xDBFF) end -= 1; } // do not split a surrogate pair\n    out.push(s.slice(i, end));\n    i = end;\n  }\n  return out;\n};\nconst rich = (s) => chunk(String(s)).map(c => ({ type: 'text', text: { content: c } }));\nconst body = {\n  parent: { database_id: 'a807f4c25dfe4ce388626726b7d99f6d' },\n  properties: {\n    'Title': { title: [{ type: 'text', text: { content: String(TITLE).slice(0, 150) } }] },\n    'Agent': { select: { name: AGENT } },\n    'Type': { select: { name: TYPE } },\n    'Draft': { rich_text: rich(DRAFT) },\n    'Status': { select: { name: 'Awaiting Approval' } },\n    'QA Result': { select: { name: 'Not checked' } },\n    'Related Job': { rich_text: rich(String(RELATED).slice(0, 1900)) }\n  }\n};\nreturn [{ json: { notionBody: body } }];\n"
+   },
+   "name": "Chunk Draft",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1650,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.notion.com/v1/pages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "notionApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
       {
-       "key": "Title|title",
-       "title": "={{ $('Parse reply').first().json.title }}"
+       "name": "Notion-Version",
+       "value": "2022-06-28"
       },
       {
-       "key": "Agent|select",
-       "selectValue": "Support"
-      },
-      {
-       "key": "Type|select",
-       "selectValue": "Reply"
-      },
-      {
-       "key": "Draft|rich_text",
-       "text": "={{ $('Parse reply').first().json.reply }}"
-      },
-      {
-       "key": "Status|select",
-       "selectValue": "Awaiting Approval"
-      },
-      {
-       "key": "Related Job|rich_text",
-       "text": "={{ $('Parse reply').first().json.job_name }}"
-      },
-      {
-       "key": "QA Result|select",
-       "selectValue": "Not checked"
+       "name": "content-type",
+       "value": "application/json"
       }
      ]
     },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.notionBody) }}",
     "options": {}
    },
    "name": "Create Approval",
-   "type": "n8n-nodes-base.notion",
-   "typeVersion": 2.2,
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
    "position": [
-    1760,
+    1870,
     0
    ],
    "credentials": {
@@ -315,6 +311,104 @@
    "position": [
     2200,
     0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.has_draft }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Has draft?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1740,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Support (no draft): ' + $('Parse reply').first().json.title }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Support (no draft): ' + $('Parse reply').first().json.title }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Support"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Error"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ JSON.stringify({ needs_human: true, reason: $('Parse reply').first().json.reason }) }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Error",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1960,
+    260
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ status: 'error', needs_human: true, reason: $('Parse reply').first().json.reason }) }}",
+    "options": {
+     "responseCode": 502
+    }
+   },
+   "name": "Respond No Draft",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    2180,
+    260
    ]
   }
  ],
@@ -407,7 +501,7 @@
    "main": [
     [
      {
-      "node": "Create Approval",
+      "node": "Has draft?",
       "type": "main",
       "index": 0
      }
@@ -430,6 +524,46 @@
     [
      {
       "node": "Respond Drafted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Chunk Draft": {
+   "main": [
+    [
+     {
+      "node": "Create Approval",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Has draft?": {
+   "main": [
+    [
+     {
+      "node": "Chunk Draft",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Log Error",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Error": {
+   "main": [
+    [
+     {
+      "node": "Respond No Draft",
       "type": "main",
       "index": 0
      }

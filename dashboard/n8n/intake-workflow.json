@@ -1,0 +1,532 @@
+{
+ "name": "Jarvis Intake (Conductor)",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/intake",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Intake Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-intake"
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst b = $input.first().json.body || {};\nconst s = v => (typeof v === 'string' ? v.trim() : '');\nconst errors = [];\nif (!s(b.source)) errors.push('source is required');\nif (!s(b.from)) errors.push('from is required');\nif (!s(b.text)) errors.push('text is required');\nfor (const k of ['subject','client_name','job_name']) if (b[k] !== undefined && b[k] !== null && typeof b[k] !== 'string') errors.push(k + ' must be a string');\nif (s(b.text).length > 8000) errors.push('text too long');\nif (b.items !== undefined && !Array.isArray(b.items)) errors.push('items must be an array');\nreturn [{ json: { valid: errors.length === 0, errors, source: s(b.source), from: s(b.from), subject: s(b.subject), text: s(b.text), client_name: s(b.client_name), job_name: s(b.job_name), items: Array.isArray(b.items) ? b.items : [] } }];\n"
+   },
+   "name": "Validate",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.valid }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Input valid?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ error: 'Invalid input', details: $json.errors }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond Bad Input",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/inbound",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ source: $json.source, from: $json.from, subject: $json.subject, text: $json.text }) }}",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "name": "Call Router",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    0
+   ],
+   "onError": "continueErrorOutput",
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst v = $('Validate').first().json;\nconst r = $json || {};\nconst OK = ['FIRE','IMPORTANT','ROUTINE','AWARENESS'];\nlet path, why;\nif (!OK.includes(r.severity) || typeof r.owner !== 'string') { path = 'human'; why = 'Router response was not usable; held for a human.'; }\nelse if (r.severity === 'FIRE' || r.needs_human === true) { path = 'human'; why = 'Router flagged ' + r.severity + (r.needs_human ? ' / needs_human' : '') + ' (' + (r.reason || 'no reason') + '). No downstream agent called.'; }\nelse if (r.owner === 'Support') { path = 'support'; why = 'Routed to Support for a draft reply.'; }\nelse if (r.owner === 'Estimator') { path = v.items.length ? 'estimator_items' : 'estimator_needs'; why = v.items.length ? 'Routed to Estimator with provided items.' : 'Estimator needs items; none provided, nothing called.'; }\nelse if (r.owner === 'Marketer') { path = 'marketer'; why = 'Routed to Marketer; routing recorded only, nothing called.'; }\nelse { path = 'human'; why = 'Owner ' + r.owner + ' has no automated path; held for a human.'; }\nreturn [{ json: { path, why, routing: r } }];\n"
+   },
+   "name": "Decide",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "rules": {
+     "values": [
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "typeValidation": "loose"
+        },
+        "combinator": "and",
+        "conditions": [
+         {
+          "id": "r0",
+          "leftValue": "={{ $json.path }}",
+          "rightValue": "support",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ]
+       },
+       "renameOutput": true,
+       "outputKey": "support"
+      },
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "typeValidation": "loose"
+        },
+        "combinator": "and",
+        "conditions": [
+         {
+          "id": "r1",
+          "leftValue": "={{ $json.path }}",
+          "rightValue": "estimator_items",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ]
+       },
+       "renameOutput": true,
+       "outputKey": "estimator_items"
+      }
+     ]
+    },
+    "options": {
+     "fallbackOutput": "extra",
+     "renameFallbackOutput": "local"
+    }
+   },
+   "name": "Route by path",
+   "type": "n8n-nodes-base.switch",
+   "typeVersion": 3.2,
+   "position": [
+    1100,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/support",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ client_name: $('Validate').first().json.client_name || $('Validate').first().json.from, message: $('Validate').first().json.text, job_name: $('Validate').first().json.job_name }) }}",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "name": "Call Support",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1320,
+    -120
+   ],
+   "onError": "continueErrorOutput",
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/estimate",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ job_name: $('Validate').first().json.job_name, items: $('Validate').first().json.items, notes: $('Validate').first().json.text }) }}",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "name": "Call Estimator",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1320,
+    40
+   ],
+   "onError": "continueErrorOutput",
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst d = $('Decide').first().json;\nconst down = d.path === 'support' || d.path === 'estimator_items';\nlet ds, extra = {}, note = d.why;\nif (down) {\n  const j = $json || {};\n  ds = j.status || 'ok';\n  if (j.approval_id) extra.approval_created = true;\n  if (j.approval_id) extra.approval_id = j.approval_id;\n  note += ' Downstream status: ' + ds + '.';\n} else if (d.path === 'estimator_needs') ds = 'needs_intake';\nelse if (d.path === 'marketer') ds = 'routed_only';\nelse ds = 'held_for_human';\nconst response = { routing: d.routing, downstream_status: ds, ...extra };\nif (d.path === 'estimator_needs') response.note = 'Estimator needs items: ask the client for the missing details';\nif (down) response.downstream = $json;\nreturn [{ json: { response, log_note: note + ' ' + JSON.stringify(d.routing) } }];\n"
+   },
+   "name": "Prepare response",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Intake: ' + ($('Validate').first().json.subject || '(no subject)') }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Intake: ' + ($('Validate').first().json.subject || '(no subject)') }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Conductor"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ $('Prepare response').first().json.log_note }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Conductor Done",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1760,
+    200
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($('Prepare response').first().json.response) }}",
+    "options": {}
+   },
+   "name": "Respond Result",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1980,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Intake error: ' + ($('Validate').first().json.subject || '(no subject)') }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Intake error: ' + ($('Validate').first().json.subject || '(no subject)') }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Conductor"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Error"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'Downstream call failed: ' + (JSON.stringify($json.error || $json).slice(0, 1500)) }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Conductor Error",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    420
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ error: 'Downstream call failed; logged to Activity Log as Error', stage: 'router_or_agent' }) }}",
+    "options": {
+     "responseCode": 502
+    }
+   },
+   "name": "Respond 502",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    420
+   ]
+  }
+ ],
+ "connections": {
+  "Intake Webhook": {
+   "main": [
+    [
+     {
+      "node": "Validate",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate": {
+   "main": [
+    [
+     {
+      "node": "Input valid?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Input valid?": {
+   "main": [
+    [
+     {
+      "node": "Call Router",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Bad Input",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call Router": {
+   "main": [
+    [
+     {
+      "node": "Decide",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Log Conductor Error",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Decide": {
+   "main": [
+    [
+     {
+      "node": "Route by path",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Route by path": {
+   "main": [
+    [
+     {
+      "node": "Call Support",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Call Estimator",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Prepare response",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call Support": {
+   "main": [
+    [
+     {
+      "node": "Prepare response",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Log Conductor Error",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call Estimator": {
+   "main": [
+    [
+     {
+      "node": "Prepare response",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Log Conductor Error",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepare response": {
+   "main": [
+    [
+     {
+      "node": "Log Conductor Done",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Conductor Done": {
+   "main": [
+    [
+     {
+      "node": "Respond Result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Conductor Error": {
+   "main": [
+    [
+     {
+      "node": "Respond 502",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

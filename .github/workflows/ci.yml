@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate workflows
+        run: python3 scripts/validate_workflows.py
+
+      - name: Validator self-tests
+        run: python3 -I scripts/test_validate_workflows.py
+
+      - name: Estimator tests
+        run: python3 -m unittest estimator.test_estimate
+
+      - name: n8n code node tests
+        run: node --test 'tests/n8n/*.test.js'
+
+      - name: Dashboard smoke test
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node tests/dashboard/smoke.test.js
+
+      - name: Secret scan
+        run: |
+          if git grep -nE -e 'sk-ant-' -e 'secret_[A-Za-z0-9_]{20,}' -e 'ntn_[A-Za-z0-9_]{20,}' -- . ':(exclude)scripts/test_validate_workflows.py'; then
+            echo "Possible secret found in tracked files" >&2
+            exit 1
+          fi

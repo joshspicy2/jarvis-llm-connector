@@ -28,7 +28,14 @@ h1 small{display:block;font-size:10px;letter-spacing:.15em;color:var(--mute);fon
 .panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
 .panel h2{margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.25em;font-weight:400;color:var(--text);display:flex;justify-content:space-between;align-items:center}
 .panel h2 i{font-style:normal;color:var(--mute);letter-spacing:.1em;font-size:10px}
-.tag-sample{font-size:9px;color:var(--warn);border:1px dashed var(--warn);padding:1px 5px;letter-spacing:.1em}
+.tag-sample,.samp-tag{font-size:9px;color:var(--warn);border:1px dashed var(--warn);padding:1px 5px;letter-spacing:.1em}
+.col>.panel.rules{max-height:24vh;overflow:auto}
+.apr{border:1px solid var(--line);padding:5px 8px;margin-top:5px;font-size:11px}
+.apr b{display:block;font-weight:500;overflow-wrap:anywhere}.apr .meta{color:var(--mute);font-size:10px;display:flex;justify-content:space-between;gap:6px}
+.apr p{margin:3px 0 0;color:var(--mute);font-size:10px;overflow-wrap:anywhere}
+.chip{font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:0 5px;border:1px solid var(--mute);color:var(--mute);white-space:nowrap}
+.chip.pass{color:var(--ok);border-color:var(--ok)}.chip.fail{color:var(--bad);border-color:var(--bad)}
+.cnt{color:var(--accent)}
 .stage{margin-bottom:10px}.stage h3{margin:0 0 4px;font-size:11px;font-weight:400;letter-spacing:.1em;color:var(--mute);display:flex;justify-content:space-between;text-transform:uppercase}
 .bar{height:3px;background:var(--line);margin-bottom:4px}.bar>div{height:100%;background:var(--accent);box-shadow:0 0 6px var(--accent)}
 .card{border:1px solid var(--line);padding:4px 8px;margin-top:4px;font-size:11px}.card b{display:block;color:var(--text);font-weight:500}.card span{color:var(--mute)}
@@ -39,7 +46,9 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--mute)}
 .active .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}.waiting .dot{background:var(--amber)}.error .dot{background:var(--bad)}
 .st{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
-.log{font-size:11px;overflow:auto;min-height:0}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
+.log{font-size:11px;overflow:auto;min-height:0}
+@media(max-height:820px){.agent p{display:none}.agent{padding:3px 0}.panel{padding:10px}.col{gap:12px}.main{gap:16px;padding-top:16px}}
+.col>.panel.shrink{flex:0 1 auto;min-height:0;overflow:auto}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
 .war-btn{width:100%;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:none;border:1px solid var(--line);color:var(--text);font:inherit;letter-spacing:.2em;padding:10px;text-transform:uppercase}
 .war-btn.on{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--accent) inset}
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
@@ -78,7 +87,8 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
   <div class="main">
     <div class="col">
       <section class="panel grow"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2><div id="pipeline"></div></section>
-      <section class="panel"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
+      <section class="panel rules"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
+      <section class="panel grow"><h2>APPROVALS <i><span class="cnt" id="aprCount">0</span> <span class="samp-tag" id="aprSample" hidden>SAMPLE</span></i></h2><div id="approvals"></div></section>
     </div>
     <div class="col center">
       <svg id="reactor" viewBox="-40 -10 480 420" aria-label="Agent reactor">
@@ -92,7 +102,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <div class="wave" id="wave"></div>
     </div>
     <div class="col">
-      <section class="panel"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
+      <section class="panel shrink"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
       <section class="panel"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
         <button class="war-btn" id="war"><span id="warLabel">War Mode: off</span><span>⏻</span></button>
         <div style="color:var(--mute);font-size:10px;margin-top:6px">Stored in Notion System Flags via n8n.</div></section>
@@ -130,6 +140,9 @@ const SAMPLE = {
   warMode: { enabled:false },
   log: [ {t:"--:--:--", text:"Sample entry: Router classified inbound lead"}, {t:"--:--:--", text:"Sample entry: Estimate draft awaiting approval"} ],
 };
+SAMPLE.approvals = [
+  {id:"s1",title:"Sample: Estimate for Dana R.",agent:"Estimator",type:"Estimate",qa:"Pass",related_job:"Sample job",created:"",preview:"Sample draft text, not real data."},
+  {id:"s2",title:"Sample: Reply to inbound lead",agent:"Support",type:"Reply",qa:"Not checked",related_job:"",created:"",preview:"Sample draft reply awaiting review."} ];
 const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
 const state = { live:{}, war:false, pending:false, warKnown:false, warSeq:0 };
 
@@ -178,6 +191,14 @@ function renderRules(rows){
   $("rules").innerHTML = `<table><thead><tr><th>Service</th><th>Category</th><th>Base</th><th>Unit</th><th>Min</th><th>Notes</th></tr></thead><tbody>${
     rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.category)}</td><td>${r.base!==""?"$"+esc(r.base):""}</td><td>${esc(r.unit)}</td><td>${r.min!==""?"$"+esc(r.min):""}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
 }
+function renderApprovals(rows, isSample){
+  rows = Array.isArray(rows) ? rows : [];
+  $("aprCount").textContent = rows.length; $("aprSample").hidden = !isSample;
+  if(!rows.length){ $("approvals").innerHTML = `<div class="empty">Nothing waiting</div>`; return; }
+  $("approvals").innerHTML = rows.map(r=>{
+    const q = String(r.qa||"Not checked"), cls = q==="Pass"?"pass":q==="Fail"?"fail":"";
+    return `<div class="apr"><b>${esc(r.title)}</b><div class="meta"><span>${esc(r.agent)} · ${esc(r.type)}${r.related_job?" · "+esc(r.related_job):""}</span><span class="chip ${cls}">QA ${esc(q)}</span></div>${r.preview?`<p>${esc(r.preview)}</p>`:""}</div>`}).join("");
+}
 function setWar(on){
   state.war = on; document.body.classList.toggle("war", on);
   $("war").classList.toggle("on", on); $("warLabel").textContent = "War Mode: " + (on?"ON":"off");
@@ -189,6 +210,9 @@ async function refresh(){
   const [p,a,r,w,lg] = await Promise.all([
     load("pipeline",SAMPLE.pipeline), load("agents",SAMPLE.agents),
     load("rules",SAMPLE.rules), load("warMode",null), load("log",SAMPLE.log)]);
+  let ap, aprSample = false;
+  try { ap = await call("approvals"); } catch(e){ ap = SAMPLE.approvals; aprSample = true; }
+  renderApprovals(ap, aprSample);
   renderPipeline(p); renderAgents(a); renderRules(r); renderLog(lg);
   if(w && typeof w.enabled==="boolean"){ if(!state.pending && seq===state.warSeq){ state.warKnown=true; setWar(w.enabled); } }
   else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; }

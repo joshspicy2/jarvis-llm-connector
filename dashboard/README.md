@@ -10,6 +10,7 @@ All data comes from n8n webhooks at `https://ops.hightidewash.net/webhook` (edit
 | `/jarvis/pipeline` | GET | `{stages:[{name, cards:[{title, sub}]}]}` (from Pipeline DB) |
 | `/jarvis/agents` | GET | `[{name, status: active\|idle\|waiting\|error, detail}]` (the 11 agents in docs/AGENT-WORKFLOW.md; old names Estimate/Content/Integrator map to Estimator/Marketer/Conductor) |
 | `/jarvis/estimate-rules` | GET | `[{service, category, base, unit, min, notes}]` (Estimate Rules DB) |
+| `/jarvis/approvals` | GET | `[{id, title, agent, type, qa: Pass\|Fail\|Not checked, related_job, created, preview}]` (Approvals DB, Awaiting Approval only, oldest first, max 25; read-only, approve in Notion) |
 | `/jarvis/war-mode` | GET | `{enabled: bool}` (System Flags DB) |
 | `/jarvis/war-mode` | POST | body `{enabled: bool}`; n8n writes the Notion System Flag so agents and dashboard share one source |
 | `/jarvis/activity-log` | GET | `[{t, text}]` (Agent Activity Log DB, newest last) |
