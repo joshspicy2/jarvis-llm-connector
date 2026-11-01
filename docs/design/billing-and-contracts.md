@@ -62,7 +62,7 @@ Yes, usefully:
 
 Answered by Joshua: "regular" = standard clean; every client signs a contract; recurring clients are on a Stripe subscription that auto-charges on the clean day (every week or every other week) or, for monthly clients, on the day of the first clean; rescheduling does not stop the charge; cancelling needs one week's notice. (An earlier draft wrongly assumed per-visit charging.)
 
-1. Weekly and bi-weekly price is the per-visit price on the same weekday as the clean, so there is no five-Friday issue. Monthly clients pay a flat monthly price. Confirm the monthly price comes from Estimate Rules (e.g. one visit price), and check monthly day 29-31 (Stripe moves those charges to the last day of shorter months).
+1. Weekly and bi-weekly price is the per-visit price on the same weekday as the clean, so there is no five-Friday issue. Monthly clients pay a flat monthly price. Confirm the monthly price comes from Estimate Rules (e.g. one visit price). Monthly charge day is set by Joshua, usually mid-month, so the day 29-31 edge case does not come up; the Notion client record should store the chosen day.
 2. Cancellation: how is the one-week notice enforced? Suggested: the client cancels via the Stripe Customer Portal or by message, a human confirms, and n8n sets `cancel_at` for the next billing date at least 7 days out.
 3. Failed payments: how many retries, and when does a human step in? (Finance agent drafts the client message into Approvals.)
 4. Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
