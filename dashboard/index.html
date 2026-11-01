@@ -101,6 +101,20 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
 .rbar .lbl{flex:0 0 110px;overflow-wrap:anywhere}.rbar .trk{flex:1;height:8px;background:var(--line);display:flex;min-width:0}
 .rbar .trk i{display:block;height:100%;background:var(--accent)}.rbar .trk i.e{background:var(--bad)}.rbar .num{flex:0 0 auto;color:var(--mute);min-width:60px;text-align:right}
 .kpis{display:flex;gap:16px;flex-wrap:wrap}.kpis div{font-size:10px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase}.kpis b{display:block;font-size:18px;color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.tile{border:1px solid var(--line);padding:8px 10px;font-size:10px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase;min-width:0}
+.tile b{display:block;font-size:18px;color:var(--accent);letter-spacing:0;overflow-wrap:anywhere}
+.sstrip{display:flex;gap:8px;flex-wrap:wrap}
+.sst{border:1px solid var(--line);padding:5px 10px;font-size:11px;display:flex;gap:8px;align-items:center}
+.sst b{color:var(--accent);font-size:14px}.sst.bad{border-color:var(--bad);border-left-width:4px}.sst.bad b{color:var(--bad)}
+.pill{display:inline-block;font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:0 6px;border:1px solid var(--mute);color:var(--mute);white-space:nowrap}
+.pill.bad{border-color:var(--bad);color:var(--bad);font-weight:700}
+.ship{list-style:none;margin:0;padding:0}
+.ship li{border:1px solid var(--line);border-left:4px solid var(--line);padding:5px 8px;margin-top:5px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;font-size:11px}
+.ship li.over{border-left-color:var(--bad);border-left-style:double;border-color:var(--bad)}
+.ship li div{min-width:0;overflow-wrap:anywhere}.ship li span.m{display:block;color:var(--mute);font-size:10px}
+.tscroll{overflow-x:auto}
+.etsycnt b small{font-size:9px;color:var(--warn);font-weight:400}
 @media (max-width:900px){
  html,body{height:auto;min-width:0;min-height:0;overflow:visible}
  .app{height:auto;min-height:100vh}
@@ -121,6 +135,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
  .apr,.bcard{font-size:12px}
  .reportview{display:block;padding:16px 16px 190px}.reportview>.panel{margin-bottom:16px}
  .rbar .lbl{flex-basis:80px}
+ .hdr-r{flex-wrap:wrap}
 }
 </style>
 </head>
@@ -133,7 +148,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <div class="stat">System status<b id="sysstat">OPTIMAL</b></div>
       <div class="stat">Local time<b id="clock">--:--:--</b></div>
     </div>
-    <div class="hdr-r"><button class="btn" id="reportBtn" type="button" aria-pressed="false">Report</button><span id="conn" class="badge sample" role="status" aria-live="polite">sample data</span></div>
+    <div class="hdr-r"><span class="stat etsycnt" id="etsyStat" title="Etsy orders to ship">Etsy to ship<b id="etsyCnt">-</b></span><button class="btn" id="salesBtn" type="button" aria-pressed="false">Sales</button><button class="btn" id="reportBtn" type="button" aria-pressed="false">Report</button><span id="conn" class="badge sample" role="status" aria-live="polite">sample data</span></div>
   </header>
   <div class="main">
     <div class="col">
@@ -165,6 +180,7 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
     </div>
   </div>
   <main class="reportview" id="reportView" hidden aria-label="Weekly report"></main>
+  <main class="reportview" id="salesView" hidden aria-label="Etsy sales, TheLuminousFairy"></main>
 </div>
 <div class="chatbar">
   <div class="chatlog" id="chatlog" role="log" aria-live="polite" aria-label="Chat messages"></div>
@@ -204,6 +220,15 @@ SAMPLE.weeklyReport = { week_start:"2026-01-05", week_end:"2026-01-11", generate
   approvals:{created:12,approved:7,rejected:2,sent:6,awaiting:3},
   qa:{pass:8,fail:1,not_checked:3},
   jobs:{by_status:{"Booked":4,"In Progress":2,"Awaiting Invoice":3,"Paid":5,"Flagged":1},flagged:1} };
+SAMPLE.etsySales = { generated_at:"", currency:"USD",
+  totals:{ orders_7d:9, revenue_7d:312.5, orders_30d:34, revenue_30d:1184.75, avg_order_30d:34.85 },
+  by_status:{ New:3, Packed:2, Shipped:6, Delivered:21, Issue:1 },
+  to_ship:[ {order:"SAMPLE-1001",buyer_first_name:"Sample Ana",items:"Sample: 2 x Luminous Candle",ship_by:"2026-10-30",overdue:true},
+            {order:"SAMPLE-1002",buyer_first_name:"Sample Ben",items:"Sample: 1 x Fairy Light Set",ship_by:"2026-11-03",overdue:false},
+            {order:"SAMPLE-1003",buyer_first_name:"Sample Cy",items:"Sample: 3 x Glow Charm",ship_by:"2026-11-04",overdue:false} ],
+  recent:[ {order:"SAMPLE-1003",date:"2026-10-31",total:48.2,status:"New"}, {order:"SAMPLE-1002",date:"2026-10-30",total:27,status:"Packed"},
+           {order:"SAMPLE-0999",date:"2026-10-28",total:64.5,status:"Shipped"}, {order:"SAMPLE-0990",date:"2026-10-25",total:19.99,status:"Delivered"} ],
+  issues:1 };
 const BOARD_COLS = ["Booked","In Progress","Awaiting Invoice","Paid","Flagged"];
 const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
@@ -382,11 +407,52 @@ function renderReport(d, isSample){
    `<section class="panel"><h2>QA</h2>${qaKeys.map(([k,l])=>bar(l,num(qa[k]),qaMax)).join("")}</section>`+
    `<section class="panel"><h2>JOBS BY STATUS <i>${num(jobs.flagged)} flagged</i></h2>${js.length?js.map(([n,v])=>bar(n,num(v),jMax)).join(""):`<div class="empty">No jobs</div>`}</section>`;
 }
-function setReportOpen(on){
-  $("reportView").hidden = !on; document.querySelector(".main").hidden = on;
-  $("reportBtn").setAttribute("aria-pressed", String(on)); $("reportBtn").textContent = on ? "Dashboard" : "Report";
+// One of: null (dashboard), "report", "sales".
+function showView(v){
+  $("reportView").hidden = v!=="report"; $("salesView").hidden = v!=="sales"; document.querySelector(".main").hidden = !!v;
+  $("reportBtn").setAttribute("aria-pressed", String(v==="report")); $("reportBtn").textContent = v==="report" ? "Dashboard" : "Report";
+  $("salesBtn").setAttribute("aria-pressed", String(v==="sales")); $("salesBtn").textContent = v==="sales" ? "Dashboard" : "Sales";
+  if(v==="sales") refreshSales();
 }
+function setReportOpen(on){ showView(on ? "report" : null); }
 $("reportBtn").addEventListener("click", ()=> setReportOpen($("reportView").hidden));
+$("salesBtn").addEventListener("click", ()=> showView($("salesView").hidden ? "sales" : null));
+
+// ---- Etsy sales (TheLuminousFairy): read-only; nothing is sent from this view ----
+const SALES_STATUSES = ["New","Packed","Shipped","Delivered","Issue"];
+function money(v, cur){
+  const n = Number(v); if(!isFinite(n)) return "-";
+  if(cur && cur!=="MIXED"){ try{ return new Intl.NumberFormat(undefined,{style:"currency",currency:String(cur)}).format(n); }catch(e){} }
+  return n.toFixed(2);
+}
+function renderSales(d, isSample){
+  const obj = o => (o && typeof o==="object" && !Array.isArray(o)) ? o : {}, arr = a => Array.isArray(a) ? a : [];
+  const r = obj(d), t = obj(r.totals), bs = obj(r.by_status), cur = r.currency ? String(r.currency) : "";
+  const mixed = cur==="MIXED", m = v => money(v, cur), cnt = v => Number(v)||0;
+  const ship = arr(r.to_ship).slice().sort((a,b)=> (b&&b.overdue?1:0)-(a&&a.overdue?1:0));
+  const issues = Array.isArray(r.issues) ? r.issues.length : cnt(r.issues);
+  const tag = isSample ? ` <span class="samp-tag" id="salesSample">SAMPLE</span>` : "";
+  const tile = (l,v) => `<div class="tile">${l}<b>${esc(v)}</b></div>`;
+  const items = x => Array.isArray(x) ? x.join(", ") : x;
+  $("etsyCnt").innerHTML = esc(ship.length) + (isSample ? ` <small>sample</small>` : "");
+  $("etsyStat").title = "Etsy orders to ship" + (isSample ? " (sample data)" : "");
+  $("salesView").innerHTML =
+   `<section class="panel wide"><h2>ETSY SALES <i>TheLuminousFairy${tag}</i></h2><div class="tiles">`+
+     tile("Orders 7d",cnt(t.orders_7d))+tile("Revenue 7d",m(t.revenue_7d))+tile("Orders 30d",cnt(t.orders_30d))+tile("Revenue 30d",m(t.revenue_30d))+tile("Avg order 30d",m(t.avg_order_30d))+tile("Issues",issues)+
+   `</div>${mixed?`<div class="aprnote">Mixed currencies: amounts are raw numbers, not converted.</div>`:""}${r.generated_at?`<div class="msg">generated ${esc(r.generated_at)}</div>`:""}</section>`+
+   `<section class="panel wide"><h2>ORDER STATUS</h2><div class="sstrip" role="list">${SALES_STATUSES.map(k=>{ const n=cnt(bs[k]), bad=k==="Issue"&&n>0;
+     return `<div class="sst${bad?" bad":""}" role="listitem"><span>${esc(k)}</span><b>${n}</b>${bad?`<span class="pill bad">needs attention</span>`:""}</div>`; }).join("")}</div></section>`+
+   `<section class="panel"><h2>TO SHIP <i><span class="cnt">${ship.length}</span></i></h2>${ship.length?`<ul class="ship">${ship.map(o=>{ o=obj(o);
+     return `<li class="${o.overdue?"over":""}"><div><b>${esc(o.order)}</b> ${esc(o.buyer_first_name)}<span class="m">${esc(items(o.items))}</span></div><div style="text-align:right"><span class="pill${o.overdue?" bad":""}">${o.overdue?"Overdue":"On time"}</span><span class="m">ship by ${esc(o.ship_by)}</span></div></li>`; }).join("")}</ul>`:`<div class="empty">Nothing to ship</div>`}</section>`+
+   `<section class="panel"><h2>RECENT ORDERS</h2>${arr(r.recent).length?`<div class="tscroll"><table><thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Status</th></tr></thead><tbody>${arr(r.recent).map(o=>{ o=obj(o);
+     return `<tr><td>${esc(o.order)}</td><td>${esc(o.date)}</td><td>${esc(m(o.total))}</td><td>${esc(o.status)}</td></tr>`; }).join("")}</tbody></table></div>`:`<div class="empty">No recent orders</div>`}</section>`;
+}
+let salesBusy = false;
+async function refreshSales(){
+  if(salesBusy) return; salesBusy = true;
+  try{ let d, s = false; try{ d = await call("etsySales"); }catch(e){ d = SAMPLE.etsySales; s = true; } renderSales(d, s); }
+  finally{ salesBusy = false; }
+}
 
 function setWar(on){
   state.war = on; if(typeof reduce!=="undefined" && reduce) requestAnimationFrame(frame); document.body.classList.toggle("war", on);
@@ -408,6 +474,7 @@ async function refresh(){
   else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; $("war").removeAttribute("aria-pressed"); }
   $("war").disabled = !state.warKnown || state.pending;
   markSample();
+  if(!$("salesView").hidden) refreshSales();
 }
 
 $("war").addEventListener("click", async ()=>{
@@ -456,7 +523,7 @@ frame();
 
 $("wave").innerHTML = Array.from({length:14},(_,i)=>`<i style="animation-delay:${(i*0.09).toFixed(2)}s;height:${8+(i*7)%22}px"></i>`).join("");
 setInterval(()=>{ $("clock").textContent = new Date().toLocaleTimeString([], {hour12:false}); },1000);
-refresh(); setInterval(()=>{ if(!document.hidden) refresh(); }, C.POLL_MS);
+refresh(); refreshSales(); setInterval(()=>{ if(!document.hidden) refresh(); }, C.POLL_MS);
 </script>
 </body>
 </html>

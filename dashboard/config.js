@@ -13,6 +13,7 @@ window.JARVIS_CONFIG = {
     decide:    { method: "POST", path: "/jarvis/approvals/decide" },
     moveJob:   { method: "POST", path: "/jarvis/pipeline/move" },
     weeklyReport: { method: "GET", path: "/jarvis/weekly-report" },
+    etsySales: { method: "GET",  path: "/jarvis/etsy-sales" },
     log:       { method: "GET",  path: "/jarvis/activity-log" },
     chat:      { method: "POST", path: "/jarvis/chat" },
   },
