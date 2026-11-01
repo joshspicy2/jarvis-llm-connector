@@ -1,0 +1,384 @@
+{
+ "name": "Jarvis Approvals Decide",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/approvals/decide",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Decide Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-approvals-decide"
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst raw = $input.first().json.body;\nconst b = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};\nconst errors = [];\nconst id = typeof b.id === 'string' ? b.id.trim() : '';\nif (!/^([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(id)) errors.push('id must be a Notion page id');\nconst decision = typeof b.decision === 'string' ? b.decision : '';\nif (decision !== 'approve' && decision !== 'reject') errors.push(\"decision must be 'approve' or 'reject'\");\nconst by = typeof b.decided_by === 'string' ? b.decided_by.trim() : '';\nif (by.length < 1 || by.length > 60) errors.push('decided_by must be 1-60 characters');\nelse if (/[\\u0000-\\u001f\\u007f<>]/.test(by)) errors.push('decided_by contains invalid characters');\nconst valid = errors.length === 0;\nreturn [{ json: { valid, errors, id: valid ? id.toLowerCase() : '', decision: valid ? decision : '', decided_by: valid ? by : '', new_status: valid ? (decision === 'approve' ? 'Approved' : 'Rejected') : '' } }];\n"
+   },
+   "name": "Validate",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.valid }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Input valid?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, error: 'Invalid input', details: $('Validate').first().json.errors }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond Bad Input",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "get",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $('Validate').first().json.id }}",
+     "mode": "id"
+    },
+    "simple": false
+   },
+   "name": "Notion Get Approval",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    660,
+    0
+   ],
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput",
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst v = $('Validate').first().json;\nconst p = $input.first().json || {};\nconst pr = p.properties || {};\nconst text = x => !x ? '' : x.select ? (x.select.name || '') : x.title ? x.title.map(t => t.plain_text).join('') : '';\nconst norm = s => String(s || '').replace(/-/g, '').toLowerCase();\nconst APPROVALS_DB = 'a807f4c25dfe4ce388626726b7d99f6d';\nlet error = '';\nif (!p.id || norm(p.id) !== norm(v.id)) error = 'Approval not found';\nelse if (!p.parent || norm(p.parent.database_id) !== APPROVALS_DB) error = 'Page is not an Approvals row';\nelse if (text(pr.Status) !== 'Awaiting Approval') error = 'Approval is not Awaiting Approval; it cannot be decided';\nreturn [{ json: { can_decide: error === '', error } }];\n"
+   },
+   "name": "Guard",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.can_decide }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Can decide?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1100,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error }) }}",
+    "options": {
+     "responseCode": 409
+    }
+   },
+   "name": "Respond Conflict",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1320,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $('Validate').first().json.id }}",
+     "mode": "id"
+    },
+    "simple": false,
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Status|select",
+       "selectValue": "={{ $('Validate').first().json.new_status }}"
+      },
+      {
+       "key": "Decided By|select",
+       "selectValue": "={{ $('Validate').first().json.decided_by }}"
+      },
+      {
+       "key": "Decided At|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Notion Decide",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1320,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "Approval decided",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "Approval decided"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Conductor"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'id=' + $('Validate').first().json.id + ' decision=' + $('Validate').first().json.decision }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log to Agent Activity",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true, id: $('Validate').first().json.id, status: $('Validate').first().json.new_status }) }}",
+    "options": {}
+   },
+   "name": "Respond Decided",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    0
+   ]
+  }
+ ],
+ "connections": {
+  "Decide Webhook": {
+   "main": [
+    [
+     {
+      "node": "Validate",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate": {
+   "main": [
+    [
+     {
+      "node": "Input valid?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Input valid?": {
+   "main": [
+    [
+     {
+      "node": "Notion Get Approval",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Bad Input",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Get Approval": {
+   "main": [
+    [
+     {
+      "node": "Guard",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guard": {
+   "main": [
+    [
+     {
+      "node": "Can decide?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Can decide?": {
+   "main": [
+    [
+     {
+      "node": "Notion Decide",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Conflict",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Decide": {
+   "main": [
+    [
+     {
+      "node": "Log to Agent Activity",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log to Agent Activity": {
+   "main": [
+    [
+     {
+      "node": "Respond Decided",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ }
+}

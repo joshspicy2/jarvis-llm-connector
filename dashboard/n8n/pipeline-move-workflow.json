@@ -1,0 +1,375 @@
+{
+ "name": "Jarvis Pipeline Move",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/pipeline/move",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Move POST",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-pipeline-movepost"
+  },
+  {
+   "parameters": {
+    "jsCode": "const STATUSES = [\"Booked\", \"In Progress\", \"Awaiting Invoice\", \"Paid\", \"Flagged\"];\nconst b = $input.first().json.body;\nconst bad = error => [{ json: { valid: false, error } }];\nif (!b || typeof b !== \"object\" || Array.isArray(b)) return bad(\"body must be a JSON object\");\nconst extra = Object.keys(b).filter(k => k !== \"id\" && k !== \"status\");\nif (extra.length) return bad(\"unexpected field: \" + extra[0]);\nif (typeof b.id !== \"string\" || !/^([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(b.id)) return bad(\"id must be a Notion page id\");\nif (typeof b.status !== \"string\" || !STATUSES.includes(b.status)) return bad(\"status must be one of: \" + STATUSES.join(\", \"));\nreturn [{ json: { valid: true, id: b.id, status: b.status } }];"
+   },
+   "name": "Validate Move",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.valid }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "name": "Move Valid?",
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ error: $json.error }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond Bad Request",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    440,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "get",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "simple": false
+   },
+   "name": "Notion Get Job",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    660,
+    0
+   ],
+   "onError": "continueRegularOutput",
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const PIPELINE_DB = \"6cc3d9aad6d14fa39377673274a4cc5f\";\nconst norm = s => String(s || \"\").replace(/-/g, \"\").toLowerCase();\nconst req = $(\"Validate Move\").first().json;\nconst reject = (code, error) => [{ json: { ok: false, code, error } }];\nconst p = $input.first().json;\nif (!p || p.error || !p.id) return reject(404, \"page not found or not readable\");\nif (norm(p.id) !== norm(req.id)) return reject(409, \"page id mismatch\");\nif (p.archived === true || p.in_trash === true) return reject(409, \"page is archived\");\nconst dbId = p.parent && p.parent.type === \"database_id\" ? p.parent.database_id : \"\";\nif (norm(dbId) !== PIPELINE_DB) return reject(409, \"page does not belong to the Pipeline database\");\nconst st = (p.properties || {})[\"Status\"];\nif (!st || st.type !== \"select\") return reject(409, \"page has no Status select\");\nconst from = st.select ? st.select.name || \"\" : \"\";\nif (from === req.status) return reject(409, \"job is already \" + req.status);\nreturn [{ json: { ok: true, id: p.id, from, to: req.status } }];"
+   },
+   "name": "Guard",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.ok }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "name": "Guard OK?",
+   "position": [
+    1100,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ error: $json.error }) }}",
+    "options": {
+     "responseCode": "={{ $json.code }}"
+    }
+   },
+   "name": "Respond Guard Rejected",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1100,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Status|select",
+       "selectValue": "={{ $json.to }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Notion Update Status",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1320,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "Job moved",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "Job moved"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Conductor"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'Job ' + $('Guard').first().json.id + ' moved: ' + ($('Guard').first().json.from || '(none)') + ' -> ' + $('Guard').first().json.to }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Job Moved",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    0
+   ],
+   "onError": "continueRegularOutput",
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true, id: $('Guard').first().json.id, from: $('Guard').first().json.from, to: $('Guard').first().json.to }) }}",
+    "options": {}
+   },
+   "name": "Respond Moved",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    0
+   ]
+  }
+ ],
+ "connections": {
+  "Move POST": {
+   "main": [
+    [
+     {
+      "node": "Validate Move",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate Move": {
+   "main": [
+    [
+     {
+      "node": "Move Valid?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Move Valid?": {
+   "main": [
+    [
+     {
+      "node": "Notion Get Job",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Bad Request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Get Job": {
+   "main": [
+    [
+     {
+      "node": "Guard",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guard": {
+   "main": [
+    [
+     {
+      "node": "Guard OK?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guard OK?": {
+   "main": [
+    [
+     {
+      "node": "Notion Update Status",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Guard Rejected",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Update Status": {
+   "main": [
+    [
+     {
+      "node": "Log Job Moved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Job Moved": {
+   "main": [
+    [
+     {
+      "node": "Respond Moved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ }
+}

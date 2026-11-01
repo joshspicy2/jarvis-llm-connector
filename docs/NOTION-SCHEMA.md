@@ -67,6 +67,11 @@ Agent options. Legacy: Router, Estimate Agent, Scheduling Agent, Finance Agent, 
 New: Conductor, Estimator, Marketer, Builder, Support, QA, Engineer, Researcher, Developer, Shield/Ops.
 The Dashboard API aliases legacy names (Estimate to Estimator, Content to Marketer, Integrator to Conductor) and
 strips a trailing " Agent". Adding the new names in Notion is still a Joshua TODO (`WORKFLOW-TRACKS.md`).
+Note: the Scheduling, Finance and Analytics agents log as `Scheduling`, `Finance` and `Analytics`. These three
+options (the legacy ones are named "Scheduling Agent" etc.) must be added to the Agent select in Notion before
+those agents log. Do not rename existing options.
+Proposed: the Etsy agent logs as `Etsy`, so an `Etsy` option must also be added to the Agent select (here and in
+Approvals) before it logs. Unverified until Joshua adds it.
 
 Used by: Router W (create, `Agent = Router`, `Status = Done`). Dashboard API R (`Timestamp`, `/^agent$/i`,
 `/^status$/i`, `/^output notes$/i`). Planned: every agent W (one row per task).
@@ -158,6 +163,38 @@ After creating: share the database with the n8n Notion integration and record it
   timing) so Draft bodies stay consistent.
 - Optional later: dashboard gets a `GET jarvis/approvals` endpoint (count of Awaiting Approval) alongside the
   existing ones.
+
+## 3b. Proposed: Etsy Orders database (unverified)
+
+Why: the Etsy agent (TheLuminousFairy store) needs one place for sales and shipping facts, so buyer messages are
+drafted only from Notion. **Everything here is proposed and unverified; the database does not exist yet.** Do not
+reference these names in n8n until Joshua creates it and the names are checked.
+
+| Property | Type | Notes |
+|---|---|---|
+| Order ID | title | internal label, e.g. `ETSY-<receipt number>` |
+| Order Number | rich text | Etsy receipt or order number, as shown in Etsy |
+| Buyer First Name | rich text | first name only, for the greeting |
+| Items Summary | rich text | what was ordered, short |
+| Total | number | order total as charged |
+| Currency | rich text | e.g. USD |
+| Order Date | date | |
+| Ship By | date | Etsy ship-by date |
+| Status | select | New, Packed, Shipped, Delivered, Issue |
+| Tracking Number | rich text | |
+| Carrier | rich text | e.g. USPS, UPS, FedEx |
+| Shipped At | date | |
+| Approval ID | rich text | page id of the shipping-confirmation row in Approvals (a relation is better later) |
+| Notes | rich text | order facts only; no addresses |
+
+Privacy: do not store buyer street addresses, email, phone or payment details in Notion. Keep only what is needed to
+draft the message (first name, items, dates, tracking). Addresses stay in Etsy.
+
+Access: Etsy agent R/W (order rows, status and tracking fields only), W create in Approvals with
+`Status = Awaiting Approval`. Analytics and Finance R. Status `Issue` hands the order to Support.
+
+Approvals: use `Type = Reply` for Etsy drafts for now. A new `Etsy Message` Type option (and `Etsy` in the Agent
+select) would need adding in Notion by Joshua; do not rename existing options.
 
 ## 4. Open questions
 1. **How does an Approved item get sent?** Nothing sends automatically today. Options: (a) Makenzie sends by hand and

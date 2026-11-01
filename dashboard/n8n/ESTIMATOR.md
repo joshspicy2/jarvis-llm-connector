@@ -23,13 +23,13 @@ Body: `{job_name, items:[{service, quantity}], notes}`. `items` must be a non-em
   Approvals row created (Type Estimate, Status Awaiting Approval, QA Result Not checked).
 Money values are strings such as `"123.45"`. `approval_id` is the Notion page id of the new Approvals row.
 
-## Running QA (not chained automatically)
-No workflow calls QA for you. After a draft is created, run it by hand with the `approval_id` from the response:
+## QA auto-chain
+After the `Create Approval` HTTP Request succeeds, the `Call QA` node (HTTP Request, POST `https://REPLACE_WITH_N8N_BASE/webhook/jarvis/qa`, body `{"approval_id": <new Approvals page id>}`, timeout 10 s, no credentials) asks the QA workflow to check the new row. It is non-blocking: `onError: continueRegularOutput`, so a QA failure, timeout or unreachable QA never blocks the response or changes the result; the flow continues to the activity log and `Respond Drafted`, whose body is unchanged (the QA reply is not used). QA writes only `QA Result` (never Status or Draft); Status stays *Awaiting Approval* for a human. If the QA call fails, the row stays `QA Result: Not checked` and you can run it by hand:
 
 ```
 curl -X POST https://<n8n-host>/webhook/jarvis/qa -H 'content-type: application/json' -d '{"approval_id":"<approval_id>"}'
 ```
-(POST `/jarvis/qa`). Until then the Approvals row stays `QA Result: Not checked`.
+Set `REPLACE_WITH_N8N_BASE` to your n8n base URL in the n8n UI, as for Intake. The call is synchronous, so the response may take a few seconds longer while QA runs (capped by the timeout).
 
 ## Approvals Draft format
 Draft = readable text for Makenzie, then a line `[estimate-json]`, then compact JSON in the section 2.5

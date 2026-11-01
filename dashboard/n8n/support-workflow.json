@@ -289,7 +289,7 @@
    "type": "n8n-nodes-base.notion",
    "typeVersion": 2.2,
    "position": [
-    1980,
+    2200,
     0
    ],
    "credentials": {
@@ -309,7 +309,7 @@
    "type": "n8n-nodes-base.respondToWebhook",
    "typeVersion": 1.1,
    "position": [
-    2200,
+    2420,
     0
    ]
   },
@@ -410,6 +410,26 @@
     2180,
     260
    ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/qa",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ approval_id: $('Create Approval').first().json.id }) }}",
+    "options": {
+     "timeout": 10000
+    }
+   },
+   "name": "Call QA",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2090,
+    0
+   ],
+   "onError": "continueRegularOutput"
   }
  ],
  "connections": {
@@ -512,7 +532,7 @@
    "main": [
     [
      {
-      "node": "Log to Agent Activity",
+      "node": "Call QA",
       "type": "main",
       "index": 0
      }
@@ -564,6 +584,17 @@
     [
      {
       "node": "Respond No Draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call QA": {
+   "main": [
+    [
+     {
+      "node": "Log to Agent Activity",
       "type": "main",
       "index": 0
      }

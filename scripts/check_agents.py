@@ -13,7 +13,11 @@ import re
 import sys
 from pathlib import Path
 
-EXPECTED_COUNT = 11
+EXPECTED_AGENTS = (
+    "analytics", "builder", "conductor", "developer", "engineer", "estimator", "etsy", "finance",
+    "marketer", "qa", "researcher", "router", "scheduling", "shield-ops", "support",
+)
+EXPECTED_COUNT = len(EXPECTED_AGENTS)  # 15
 RULES_HEADING = "## Rules every Jarvis agent follows"
 LOG_PHRASE = "Agent Activity Log"
 APPROVAL_PHRASE = "Awaiting Approval"
@@ -42,13 +46,19 @@ def extract_rules_block(text):
     return text[start:end]
 
 
-def check_agents(agents_dir, expected_count=EXPECTED_COUNT):
+def check_agents(agents_dir, expected_count=EXPECTED_COUNT, expected_agents=EXPECTED_AGENTS):
     """Return a list of error strings (empty when everything passes)."""
     errors = []
     agents_dir = Path(agents_dir)
     files = sorted(agents_dir.glob("*.md"))
     if len(files) != expected_count:
         errors.append(f"expected {expected_count} agent files in {agents_dir}, found {len(files)}")
+    if expected_agents is not None:
+        present = {f.stem for f in files}
+        for name in sorted(set(expected_agents) - present):
+            errors.append(f"missing expected agent file: {name}.md")
+        for name in sorted(present - set(expected_agents)):
+            errors.append(f"unexpected agent file not in the expected roster: {name}.md")
     blocks = {}
     for f in files:
         raw = f.read_bytes()

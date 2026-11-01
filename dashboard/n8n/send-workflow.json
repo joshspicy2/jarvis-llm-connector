@@ -1,0 +1,585 @@
+{
+ "name": "Jarvis Send Step (SAFE BY DEFAULT, DRY_RUN)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 10
+      }
+     ]
+    }
+   },
+   "name": "Every 10 minutes",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "a807f4c25dfe4ce388626726b7d99f6d",
+     "mode": "id"
+    },
+    "returnAll": false,
+    "limit": 50,
+    "simple": false,
+    "filterType": "manual",
+    "matchType": "allFilters",
+    "filters": {
+     "conditions": [
+      {
+       "key": "Status|select",
+       "condition": "equals",
+       "selectValue": "Approved"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Notion Approved rows",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Select sendable: re-validate every row Notion returned. Pure selection, writes nothing.\nconst CAP = 5;\nconst TYPES = [\"Estimate\", \"Reply\", \"Content\"];\nconst txt = v => !v ? \"\" : v.title ? v.title.map(t => t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t => t.plain_text).join(\"\") : v.select ? (v.select.name || \"\") : \"\";\nconst prop = (pr, name) => { for (const k in pr) if (k.toLowerCase() === name) return pr[k]; return null; };\nconst view = p => {\n  const pr = p.properties || {};\n  let title = \"\";\n  for (const k in pr) if (pr[k] && pr[k].type === \"title\") title = txt(pr[k]);\n  return { id: p.id, title: title || \"(untitled)\", status: txt(prop(pr, \"status\")), type: txt(prop(pr, \"type\")),\n    qa: txt(prop(pr, \"qa result\")), decided_by: txt(prop(pr, \"decided by\")), draft: txt(prop(pr, \"draft\")).trim(),\n    decided_at: ((prop(pr, \"decided at\") || {}).date || {}).start || \"\", edited: p.last_edited_time || \"\", created: p.created_time || \"\" };\n};\n// Returns \"\" when the row may be sent, else the reason it must be skipped.\nconst problem = v => {\n  if (v.status !== \"Approved\") return \"status is not Approved (\" + (v.status || \"empty\") + \")\";\n  if (v.qa === \"Fail\" && !v.decided_by) return \"QA Fail without Decided By\";\n  if (!TYPES.includes(v.type)) return \"type not whitelisted (\" + (v.type || \"empty\") + \")\";\n  if (!v.draft) return \"Draft is empty\";\n  return \"\";\n};\nconst skipped = [];\nconst ok = [];\nfor (const it of $input.all()) {\n  const p = it.json;\n  if (!p || !p.id) continue;\n  const v = view(p);\n  const why = problem(v);\n  if (why) skipped.push({ id: v.id, title: v.title, reason: why }); else ok.push(v);\n}\nok.sort((a, b) => String(a.decided_at || a.created).localeCompare(String(b.decided_at || b.created)));\nconst picked = ok.slice(0, CAP);\nconst deferred = ok.length - picked.length;\nconst summary = { seen: $input.all().filter(i => i.json && i.json.id).length, eligible: ok.length, picked: picked.length, deferred, skipped };\nreturn [{ json: { kind: \"summary\", summary } }, ...picked.map(v => ({ json: { kind: \"candidate\", id: v.id, title: v.title, type: v.type, draft: v.draft, decided_at: v.decided_at } }))];\n"
+   },
+   "name": "Select sendable",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const s = $('Select sendable').first().json.summary;\nconst notes = \"Send step selection. DRY_RUN is decided later. seen=\" + s.seen + \" eligible=\" + s.eligible + \" picked=\" + s.picked + \" deferred=\" + s.deferred + \" skipped=\" + s.skipped.length + (s.skipped.length ? \". Skipped: \" + s.skipped.slice(0, 10).map(x => x.title + \" (\" + x.reason + \")\").join(\"; \") : \"\");\nreturn [{ json: { task: \"Send step: selection\", status: \"Done\", notes: notes.slice(0, 1900) } }];\n"
+   },
+   "name": "Build selection log",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    -220
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.kind === 'candidate' }}",
+       "value2": true
+      }
+     ]
+    }
+   },
+   "name": "Has candidates?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    660,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "get",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "simple": false
+   },
+   "name": "Re-fetch page",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    880,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Recheck and decide: runs on pages freshly re-fetched from Notion, immediately before any send.\n// SAFE BY DEFAULT: while DRY_RUN is true nothing is ever marked Sent and no item reaches the sender.\n// Joshua flips this to false only at go-live (see SEND.md).\nconst DRY_RUN = true;\nconst GRACE_MS = 5 * 60 * 1000; // Decided At is typed by a human around the same time as Status\nconst TYPES = [\"Estimate\", \"Reply\", \"Content\"];\nconst txt = v => !v ? \"\" : v.title ? v.title.map(t => t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t => t.plain_text).join(\"\") : v.select ? (v.select.name || \"\") : \"\";\nconst prop = (pr, name) => { for (const k in pr) if (k.toLowerCase() === name) return pr[k]; return null; };\nconst view = p => {\n  const pr = p.properties || {};\n  let title = \"\";\n  for (const k in pr) if (pr[k] && pr[k].type === \"title\") title = txt(pr[k]);\n  return { id: p.id, title: title || \"(untitled)\", status: txt(prop(pr, \"status\")), type: txt(prop(pr, \"type\")),\n    qa: txt(prop(pr, \"qa result\")), decided_by: txt(prop(pr, \"decided by\")), draft: txt(prop(pr, \"draft\")).trim(),\n    decided_at: ((prop(pr, \"decided at\") || {}).date || {}).start || \"\", edited: p.last_edited_time || \"\", created: p.created_time || \"\" };\n};\n// Returns \"\" when the row may be sent, else the reason it must be skipped.\nconst problem = v => {\n  if (v.status !== \"Approved\") return \"status is not Approved (\" + (v.status || \"empty\") + \")\";\n  if (v.qa === \"Fail\" && !v.decided_by) return \"QA Fail without Decided By\";\n  if (!TYPES.includes(v.type)) return \"type not whitelisted (\" + (v.type || \"empty\") + \")\";\n  if (!v.draft) return \"Draft is empty\";\n  return \"\";\n};\nconst picked = {};\nfor (const it of $('Select sendable').all()) if (it.json && it.json.kind === \"candidate\") picked[it.json.id] = it.json;\nconst out = [];\nfor (const it of $input.all()) {\n  const p = it.json;\n  if (!p || !p.id || !picked[p.id]) continue;\n  const v = view(p);\n  const base = { id: v.id, title: v.title, type: v.type, draft: v.draft, dry_run: DRY_RUN };\n  const why = problem(v);\n  if (why) { out.push({ json: { ...base, decision: \"skip\", reason: why } }); continue; }\n  const dAt = v.decided_at.length <= 10 ? Date.parse(v.decided_at + \"T23:59:59.999Z\") : Date.parse(v.decided_at);\n  const edited = Date.parse(v.edited);\n  if (!dAt || !edited) { out.push({ json: { ...base, decision: \"skip\", reason: \"missing Decided At or Last Edited; cannot verify no edits after approval\" } }); continue; }\n  if (edited > dAt + GRACE_MS || v.draft !== picked[v.id].draft) {\n    out.push({ json: { ...base, decision: \"reset\", reason: \"edited after approval; Status returns to Awaiting Approval (schema rule 4)\" } });\n    continue;\n  }\n  out.push({ json: { ...base, decision: DRY_RUN ? \"would_send\" : \"send\", reason: DRY_RUN ? \"DRY_RUN is true: would send, nothing sent\" : \"re-checked Approved, unedited\" } });\n}\nreturn out;\n"
+   },
+   "name": "Recheck and decide",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    0
+   ],
+   "notes": "DRY_RUN = true ships here. While true, nothing is sent and nothing is set to Sent; rows are only logged as 'would send'. Joshua flips it at go-live (see SEND.md)."
+  },
+  {
+   "parameters": {
+    "jsCode": "const items = $input.all().map(i => i.json).filter(j => j && j.id);\nconst n = d => items.filter(j => j.decision === d);\nconst dry = items.length ? items[0].dry_run : true;\nconst list = d => n(d).map(j => j.title).join(\"; \");\nconst notes = \"DRY_RUN=\" + dry + \". would_send=\" + n(\"would_send\").length + \" send=\" + n(\"send\").length + \" reset=\" + n(\"reset\").length + \" skip=\" + n(\"skip\").length +\n  (n(\"would_send\").length ? \". Would send: \" + list(\"would_send\") : \"\") + (n(\"send\").length ? \". Sending: \" + list(\"send\") : \"\") +\n  (n(\"reset\").length ? \". Reset to Awaiting Approval: \" + list(\"reset\") : \"\") + (n(\"skip\").length ? \". Skipped: \" + n(\"skip\").map(j => j.title + \" (\" + j.reason + \")\").join(\"; \") : \"\");\nreturn [{ json: { task: \"Send step: \" + (dry ? \"dry run\" : \"live\") + \" result\", status: \"Done\", notes: notes.slice(0, 1900) } }];\n"
+   },
+   "name": "Build outcome log",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    -220
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ $json.task }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ $json.task }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Conductor"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "={{ $json.status }}"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ $json.notes }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log to Agent Activity",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    -220
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.decision === 'reset' }}",
+       "value2": true
+      }
+     ]
+    }
+   },
+   "name": "Needs reset?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    1320,
+    140
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "simple": false,
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Status|select",
+       "selectValue": "Awaiting Approval"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Reset to Awaiting Approval",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    140
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.decision === 'send' }}",
+       "value2": true
+      }
+     ]
+    }
+   },
+   "name": "Send?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    1320,
+    320
+   ]
+  },
+  {
+   "parameters": {},
+   "name": "Send (DISABLED)",
+   "type": "n8n-nodes-base.noOp",
+   "typeVersion": 1,
+   "position": [
+    1540,
+    320
+   ],
+   "disabled": true,
+   "notes": "PLACEHOLDER, DISABLED ON PURPOSE. Joshua must replace this node with his real sender (email/SMS/post) and enable it, and only after the go-live checklist in SEND.md. The replacement must output the incoming fields plus send_ok = true on success only (and no send_ok on failure). A disabled node passes items through without send_ok, so nothing is ever marked Sent by accident."
+  },
+  {
+   "parameters": {
+    "jsCode": "// Confirm send result: only an item the sender explicitly flags send_ok === true counts as success.\n// A disabled or missing sender passes items through untouched, so nothing here is ever \"confirmed\" by default.\nconst out = [];\nfor (const it of $input.all()) {\n  const j = it.json || {};\n  out.push({ json: { ...j, confirmed: j.decision === \"send\" && j.dry_run === false && j.send_ok === true } });\n}\nreturn out;\n"
+   },
+   "name": "Confirm send result",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    320
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.confirmed === true }}",
+       "value2": true
+      }
+     ]
+    }
+   },
+   "name": "Confirmed?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    1980,
+    320
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "simple": false,
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Status|select",
+       "selectValue": "Sent"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Mark Sent",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    2200,
+    320
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Sent: ' + $('Confirm send result').item.json.title }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Sent: ' + $('Confirm send result').item.json.title }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Conductor"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'Marked Sent after a confirmed send. Page ' + $('Confirm send result').item.json.id }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Sent",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    2420,
+    320
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Every 10 minutes": {
+   "main": [
+    [
+     {
+      "node": "Notion Approved rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Approved rows": {
+   "main": [
+    [
+     {
+      "node": "Select sendable",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Select sendable": {
+   "main": [
+    [
+     {
+      "node": "Build selection log",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Has candidates?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build selection log": {
+   "main": [
+    [
+     {
+      "node": "Log to Agent Activity",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Has candidates?": {
+   "main": [
+    [
+     {
+      "node": "Re-fetch page",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Re-fetch page": {
+   "main": [
+    [
+     {
+      "node": "Recheck and decide",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Recheck and decide": {
+   "main": [
+    [
+     {
+      "node": "Build outcome log",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Needs reset?",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Send?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build outcome log": {
+   "main": [
+    [
+     {
+      "node": "Log to Agent Activity",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Needs reset?": {
+   "main": [
+    [
+     {
+      "node": "Reset to Awaiting Approval",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Send?": {
+   "main": [
+    [
+     {
+      "node": "Send (DISABLED)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Send (DISABLED)": {
+   "main": [
+    [
+     {
+      "node": "Confirm send result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Confirm send result": {
+   "main": [
+    [
+     {
+      "node": "Confirmed?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Confirmed?": {
+   "main": [
+    [
+     {
+      "node": "Mark Sent",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mark Sent": {
+   "main": [
+    [
+     {
+      "node": "Log Sent",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ }
+}

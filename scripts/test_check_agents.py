@@ -29,13 +29,23 @@ class CheckAgentsTest(unittest.TestCase):
         (self.dir / f"{name}.md").write_text(text, encoding="utf-8")
 
     def run_check(self):
-        return check_agents.check_agents(self.dir, expected_count=3)
+        return check_agents.check_agents(self.dir, expected_count=3, expected_agents=None)
 
     def test_valid(self):
         self.assertEqual(self.run_check(), [])
 
     def test_count(self):
-        self.assertTrue(any("expected 11" in e for e in check_agents.check_agents(self.dir)))
+        self.assertTrue(any("expected 15" in e for e in check_agents.check_agents(self.dir)))
+
+    def test_roster_names(self):
+        errs = check_agents.check_agents(self.dir, expected_count=3, expected_agents=("a", "b", "z"))
+        self.assertTrue(any("missing expected agent file: z.md" in e for e in errs))
+        self.assertTrue(any("c.md" in e and "not in the expected roster" in e for e in errs))
+
+    def test_default_roster(self):
+        self.assertEqual(len(check_agents.EXPECTED_AGENTS), 15)
+        for n in ("scheduling", "finance", "analytics", "etsy"):
+            self.assertIn(n, check_agents.EXPECTED_AGENTS)
 
     def test_name_mismatch(self):
         self.write("a", agent("zzz"))
@@ -68,7 +78,7 @@ class CheckAgentsTest(unittest.TestCase):
         self.assertTrue(any("Approvals" in e for e in errs))
 
     def test_main_exit_codes(self):
-        # main() uses the default count of 11, so 3 fixtures fail with exit 1
+        # main() uses the default count of 15, so 3 fixtures fail with exit 1
         self.assertEqual(check_agents.main(["x", str(self.dir)]), 1)
 
 

@@ -54,6 +54,14 @@ describe('Shape Pipeline', () => {
     });
   });
 
+  test('cards carry the Notion page id so the board can move them', () => {
+    const items = [job('A', 'Booked')];
+    const body = run('Shape Pipeline', items).body;
+    const card = body.stages.find((s) => s.name === 'Booked').cards[0];
+    assert.equal(card.id, items[0].id);
+    assert.ok(card.id);
+  });
+
   test('empty input still yields five empty stages', () => {
     const body = run('Shape Pipeline', []).body;
     assert.equal(body.stages.length, 5);
@@ -78,8 +86,9 @@ describe('Shape Pipeline', () => {
     ]).body;
     const cards = body.stages[0].cards;
     assert.equal(cards.length, 2);
-    assert.deepEqual(cards[0], { title: '(untitled)', sub: 'Install · 2026-02-03' });
-    assert.deepEqual(cards[1], { title: 'OnlyDate', sub: '2026-02-04' });
+    assert.deepEqual(cards[0], { id: cards[0].id, title: '(untitled)', sub: 'Install · 2026-02-03' });
+    assert.deepEqual(cards[1], { id: cards[1].id, title: 'OnlyDate', sub: '2026-02-04' });
+    assert.ok(cards[0].id && cards[1].id);
   });
 
   test('Status as select type also works', () => {

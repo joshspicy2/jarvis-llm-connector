@@ -73,6 +73,55 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
 .chatbar input{flex:1;background:none;border:0;color:var(--text);font:inherit;font-size:13px;letter-spacing:.1em;outline:none;min-width:0;text-transform:uppercase}
 .chatbar input::placeholder{color:var(--mute)}
 .chatbar button{background:none;border:1px solid var(--accent);color:var(--accent);border-radius:99px;padding:6px 14px;font:inherit;letter-spacing:.15em;cursor:pointer}
+.hdr-r{display:flex;gap:10px;align-items:center}
+.btn,.seg button{background:none;border:1px solid var(--line);color:var(--text);font:inherit;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;cursor:pointer}
+.btn:disabled,.seg button:disabled{opacity:.45;cursor:not-allowed}
+.btn.go{border-color:var(--ok);color:var(--ok)}.btn.no{border-color:var(--bad);color:var(--bad)}
+.btn[aria-pressed="true"],.seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.btn:focus-visible,.seg button:focus-visible,.mv select:focus-visible,#decidedBy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:flex;gap:4px;margin-bottom:8px}
+.aprby{display:flex;gap:6px;align-items:center;font-size:10px;color:var(--mute);margin-bottom:4px}
+#decidedBy,.mv select{background:var(--bg);border:1px solid var(--line);color:var(--text);font:inherit;font-size:11px;padding:3px 6px;min-width:0}
+#decidedBy{flex:1}
+.apract{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:10px}
+.aprnote{color:var(--warn);font-size:10px;margin-top:4px}.aprerr{color:var(--bad);font-size:10px;margin-top:4px}
+.msg{font-size:10px;color:var(--mute);min-height:14px;margin-bottom:4px}
+.board{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:4px}
+.bcol{flex:1 1 130px;min-width:0;border:1px dashed var(--line);padding:6px;min-height:80px}
+.bcol.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bcol h3{margin:0 0 4px;font-size:10px;font-weight:400;letter-spacing:.1em;color:var(--mute);display:flex;justify-content:space-between;text-transform:uppercase}
+.bcard{border:1px solid var(--line);padding:4px 6px;margin-top:4px;font-size:11px;background:var(--panel)}
+.bcard[draggable="true"]{cursor:grab}.bcard.busy{opacity:.5}
+.bcard b{display:block;font-weight:500;overflow-wrap:anywhere}.bcard>span{color:var(--mute)}
+.mv{display:block;margin-top:3px;font-size:10px;color:var(--mute)}.mv select{width:100%;margin-top:2px}
+.reportview{flex:1;min-height:0;overflow:auto;padding:24px 24px 96px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-content:start}
+.reportview[hidden],.main[hidden]{display:none}
+.reportview .wide{grid-column:1/-1}
+.rbar{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px}
+.rbar .lbl{flex:0 0 110px;overflow-wrap:anywhere}.rbar .trk{flex:1;height:8px;background:var(--line);display:flex;min-width:0}
+.rbar .trk i{display:block;height:100%;background:var(--accent)}.rbar .trk i.e{background:var(--bad)}.rbar .num{flex:0 0 auto;color:var(--mute);min-width:60px;text-align:right}
+.kpis{display:flex;gap:16px;flex-wrap:wrap}.kpis div{font-size:10px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase}.kpis b{display:block;font-size:18px;color:var(--accent)}
+@media (max-width:900px){
+ html,body{height:auto;min-width:0;min-height:0;overflow:visible}
+ .app{height:auto;min-height:100vh}
+ header{flex-wrap:wrap;padding:10px 16px}
+ .hdr-mid{gap:16px}
+ .main{display:flex;flex-direction:column;gap:16px;padding:16px 16px 190px;flex:none;min-height:0}
+ .col{display:contents}.col.center{display:flex;order:5;gap:12px}
+ .col>.panel,.col>.panel.grow,.col>.panel.shrink,.col>.panel.rules{flex:none;max-height:none;overflow:visible;min-height:0}
+ .p-war{order:1}.p-approvals{order:2}.p-pipeline{order:3}.p-agents{order:4}.p-rules{order:6}.p-log{order:7}
+ #reactor{height:auto;width:min(100%,360px)}
+ #approvals,#pipeline,#rules{overflow-x:auto}
+ .log{max-height:40vh}
+ .board{flex-direction:column;overflow-x:visible}.bcol{flex:none}
+ .btn,.seg button,.war-btn,.chatbar button,#decidedBy,.mv select{min-height:40px;font-size:12px}
+ .btn,.seg button{padding:6px 12px}
+ .chatbar input{min-height:40px;font-size:16px}
+ .chatbar{padding:8px 12px}
+ .apr,.bcard{font-size:12px}
+ .reportview{display:block;padding:16px 16px 190px}.reportview>.panel{margin-bottom:16px}
+ .rbar .lbl{flex-basis:80px}
+}
 </style>
 </head>
 <body>
@@ -84,13 +133,17 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <div class="stat">System status<b id="sysstat">OPTIMAL</b></div>
       <div class="stat">Local time<b id="clock">--:--:--</b></div>
     </div>
-    <span id="conn" class="badge sample" role="status" aria-live="polite">sample data</span>
+    <div class="hdr-r"><button class="btn" id="reportBtn" type="button" aria-pressed="false">Report</button><span id="conn" class="badge sample" role="status" aria-live="polite">sample data</span></div>
   </header>
   <div class="main">
     <div class="col">
-      <section class="panel grow"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2><div id="pipeline"></div></section>
-      <section class="panel rules"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
-      <section class="panel grow"><h2>APPROVALS <i><span class="cnt" id="aprCount">0</span> <span class="samp-tag" id="aprSample" hidden>SAMPLE</span></i></h2><div id="approvals" role="region" aria-label="Approvals" tabindex="0"></div></section>
+      <section class="panel grow p-pipeline"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2>
+        <div class="seg" role="group" aria-label="Jobs view"><button type="button" id="viewList" aria-pressed="true">Pipeline list</button><button type="button" id="viewBoard" aria-pressed="false">Board</button></div>
+        <div class="msg" id="boardMsg" role="status" aria-live="polite"></div><div id="pipeline"></div></section>
+      <section class="panel rules p-rules"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
+      <section class="panel grow p-approvals"><h2>APPROVALS <i><span class="cnt" id="aprCount">0</span> <span class="samp-tag" id="aprSample" hidden>SAMPLE</span></i></h2>
+        <label class="aprby">Decided by <input id="decidedBy" maxlength="60" autocomplete="name" placeholder="your name"></label>
+        <div class="msg" id="aprMsg" role="status" aria-live="polite"></div><div id="approvals" role="region" aria-label="Approvals" tabindex="0"></div></section>
     </div>
     <div class="col center">
       <svg id="reactor" viewBox="-40 -10 480 420" role="img" aria-label="Agent reactor">
@@ -104,13 +157,14 @@ table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;p
       <div class="wave" id="wave"></div>
     </div>
     <div class="col">
-      <section class="panel shrink"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
-      <section class="panel"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
+      <section class="panel shrink p-agents"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
+      <section class="panel p-war"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
         <button class="war-btn" id="war" type="button"><span id="warLabel">War Mode: off</span><span aria-hidden="true">⏻</span></button>
         <div style="color:var(--mute);font-size:10px;margin-top:6px">Stored in Notion System Flags via n8n.</div></section>
-      <section class="panel grow"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log" role="log" aria-live="polite" aria-label="Activity log" tabindex="0"></div></section>
+      <section class="panel grow p-log"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log" role="log" aria-live="polite" aria-label="Activity log" tabindex="0"></div></section>
     </div>
   </div>
+  <main class="reportview" id="reportView" hidden aria-label="Weekly report"></main>
 </div>
 <div class="chatbar">
   <div class="chatlog" id="chatlog" role="log" aria-live="polite" aria-label="Chat messages"></div>
@@ -145,8 +199,17 @@ const SAMPLE = {
 SAMPLE.approvals = [
   {id:"s1",title:"Sample: Estimate for Dana R.",agent:"Estimator",type:"Estimate",qa:"Pass",related_job:"Sample job",created:"",preview:"Sample draft text, not real data."},
   {id:"s2",title:"Sample: Reply to inbound lead",agent:"Support",type:"Reply",qa:"Not checked",related_job:"",created:"",preview:"Sample draft reply awaiting review."} ];
+SAMPLE.weeklyReport = { week_start:"2026-01-05", week_end:"2026-01-11", generated_at:"",
+  runs_by_agent:{ Conductor:{runs:42,errors:1}, Router:{runs:30,errors:0}, Estimator:{runs:12,errors:2}, QA:{runs:9,errors:0} },
+  approvals:{created:12,approved:7,rejected:2,sent:6,awaiting:3},
+  qa:{pass:8,fail:1,not_checked:3},
+  jobs:{by_status:{"Booked":4,"In Progress":2,"Awaiting Invoice":3,"Paid":5,"Flagged":1},flagged:1} };
+const BOARD_COLS = ["Booked","In Progress","Awaiting Invoice","Paid","Flagged"];
+const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
-const state = { live:{}, war:false, pending:false, warKnown:false, warSeq:0 };
+const state = { live:{}, war:false, pending:false, warKnown:false, warSeq:0,
+  pipe:{stages:[]}, pipeSample:true, view:(store.get("jarvis.view")==="board"?"board":"list"), moving:new Set(), boardFocus:null, lastPipe:null,
+  apr:{rows:[], sample:true, confirm:null, pending:null, err:{}, last:null, focus:null} };
 
 async function call(key, body, timeoutMs){
   const ep = C.ENDPOINTS[key];
@@ -172,11 +235,64 @@ function markSample(){
   c.textContent = all ? "live · n8n" : any ? "partial · some sample data" : "sample data (n8n unreachable)";
 }
 
-function renderPipeline(d){
-  const st=Array.isArray(d&&d.stages)?d.stages:[], max=Math.max(1,...st.map(s=>(s.cards||[]).length));
-  $("pipeline").innerHTML = st.map(s=>{const n=(s.cards||[]).length;return `<div class="stage"><h3>${esc(s.name)}<span>${n}</span></h3><div class="bar"><div style="width:${n/max*100}%"></div></div>${
+function renderPipeline(d, isSample){
+  if(state.moving.size) return;           // do not clobber an in-flight move
+  state.pipe = (d && Array.isArray(d.stages)) ? d : {stages:[]}; state.pipeSample = !!isSample; drawPipeline();
+}
+function drawPipeline(){
+  const board = state.view==="board";
+  $("viewList").setAttribute("aria-pressed", String(!board)); $("viewBoard").setAttribute("aria-pressed", String(board));
+  const html = board ? boardHtml() : listHtml();
+  if(html===state.lastPipe) return; state.lastPipe = html; $("pipeline").innerHTML = html;
+  if(state.boardFocus){ const el=document.querySelector('#pipeline select[data-id="'+CSS.escape(state.boardFocus)+'"]'); if(el) el.focus(); state.boardFocus=null; }
+}
+function listHtml(){
+  const st=state.pipe.stages, max=Math.max(1,...st.map(s=>(s.cards||[]).length));
+  return st.map(s=>{const n=(s.cards||[]).length;return `<div class="stage"><h3>${esc(s.name)}<span>${n}</span></h3><div class="bar"><div style="width:${n/max*100}%"></div></div>${
     (s.cards||[]).map(c=>`<div class="card"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span></div>`).join("")}</div>`}).join("");
 }
+// Board relies on each pipeline card carrying the Notion page id as `id` (GET /jarvis/pipeline).
+function boardHtml(){
+  const st=state.pipe.stages, by={}; st.forEach(s=>{ by[s.name]=s.cards||[]; });
+  const cols = BOARD_COLS.concat(st.map(s=>s.name).filter(n=>!BOARD_COLS.includes(n) && (by[n]||[]).length));
+  const note = state.pipeSample ? `<div class="aprnote">sample data: cannot move jobs</div>` : "";
+  return note + `<div class="board">` + cols.map(n=>{
+    const cards=by[n]||[];
+    return `<div class="bcol" data-stage="${esc(n)}" role="group" aria-label="${esc(n)}, ${cards.length} jobs"><h3>${esc(n)}<span>${cards.length}</span></h3>${
+      cards.map(c=>{
+        const id=c.id?String(c.id):"", can=!state.pipeSample && id && !state.moving.has(id);
+        return `<div class="bcard${state.moving.has(id)?" busy":""}" data-id="${esc(id)}" ${can?'draggable="true"':""}><b>${esc(c.title)}</b><span>${esc(c.sub)}</span>`+
+          (!state.pipeSample && !id ? `<div class="aprnote">no job id from n8n: cannot move</div>` : "") +
+          `<label class="mv">Move<select data-id="${esc(id)}" aria-label="Move ${esc(c.title)} to"${can?"":" disabled"}>${
+            BOARD_COLS.map(o=>`<option${o===n?" selected":""}>${esc(o)}</option>`).join("")}${BOARD_COLS.includes(n)?"":`<option selected>${esc(n)}</option>`}</select></label></div>`;
+      }).join("")}</div>`; }).join("") + `</div>`;
+}
+function findJob(id){
+  for(const s of state.pipe.stages){ const i=(s.cards||[]).findIndex(c=>String(c.id)===id); if(i>=0) return {stage:s, i, card:s.cards[i]}; }
+  return null;
+}
+async function moveJob(id, to){
+  const loc = findJob(id); if(!loc || state.pipeSample || state.moving.has(id) || loc.stage.name===to) return;
+  const from = loc.stage, idx = loc.i, card = loc.card, title = card.title;
+  let dest = state.pipe.stages.find(s=>s.name===to); if(!dest){ dest={name:to,cards:[]}; state.pipe.stages.push(dest); }
+  from.cards.splice(idx,1); dest.cards.push(card); state.moving.add(id); $("boardMsg").textContent = "Moving "+title+"…"; drawPipeline();
+  try{
+    const r = await call("moveJob", {id, status:to});
+    if(!r || r.ok!==true) throw new Error("not confirmed");
+    $("boardMsg").textContent = "Moved "+title+" to "+to+".";
+  }catch(e){
+    const k = dest.cards.indexOf(card); if(k>=0) dest.cards.splice(k,1); from.cards.splice(Math.min(idx,from.cards.length),0,card);
+    $("boardMsg").textContent = "Could not move "+title+" to "+to+" ("+(e.message||"error")+"). Reverted; check Notion before retrying.";
+  }finally{ state.moving.delete(id); state.boardFocus=id; drawPipeline(); }
+}
+function setView(v){ state.view=v; store.set("jarvis.view",v); drawPipeline(); }
+$("viewList").addEventListener("click",()=>setView("list")); $("viewBoard").addEventListener("click",()=>setView("board"));
+$("pipeline").addEventListener("change", e=>{ const t=e.target; if(t.matches("select.mv, .mv select")) moveJob(t.dataset.id, t.value); });
+$("pipeline").addEventListener("dragstart", e=>{ const c=e.target.closest&&e.target.closest(".bcard[draggable]"); if(!c){ return; } e.dataTransfer.setData("text/plain", c.dataset.id); e.dataTransfer.effectAllowed="move"; });
+$("pipeline").addEventListener("dragover", e=>{ const c=e.target.closest&&e.target.closest(".bcol"); if(c){ e.preventDefault(); e.dataTransfer.dropEffect="move"; c.classList.add("over"); } });
+$("pipeline").addEventListener("dragleave", e=>{ const c=e.target.closest&&e.target.closest(".bcol"); if(c) c.classList.remove("over"); });
+$("pipeline").addEventListener("drop", e=>{ const c=e.target.closest&&e.target.closest(".bcol"); if(!c) return; e.preventDefault(); c.classList.remove("over");
+  const id=e.dataTransfer.getData("text/plain"); if(id) moveJob(id, c.dataset.stage); });
 function renderAgents(list){
   const by = Object.fromEntries((list||[]).map(a=>[a.name,a]));
   const rows = AGENT_ORDER.map(n=>({n, a: by[n]||{status:"idle",detail:"no data"}}));
@@ -195,13 +311,83 @@ function renderRules(rows){
     rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.category)}</td><td>${r.base!==""?"$"+esc(r.base):""}</td><td>${esc(r.unit)}</td><td>${r.min!==""?"$"+esc(r.min):""}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
 }
 function renderApprovals(rows, isSample){
-  rows = Array.isArray(rows) ? rows : [];
-  $("aprCount").textContent = rows.length; $("aprSample").hidden = !isSample;
-  if(!rows.length){ $("approvals").innerHTML = `<div class="empty">Nothing waiting</div>`; return; }
-  $("approvals").innerHTML = rows.map(r=>{
-    const q = String(r.qa||"Not checked"), cls = q==="Pass"?"pass":q==="Fail"?"fail":"";
-    return `<div class="apr" tabindex="0" role="group" aria-label="${esc(r.title)}"><b>${esc(r.title)}</b><div class="meta"><span>${esc(r.agent)} · ${esc(r.type)}${r.related_job?" · "+esc(r.related_job):""}</span><span class="chip ${cls}">QA ${esc(q)}</span></div>${r.preview?`<p>${esc(r.preview)}</p>`:""}</div>`}).join("");
+  const A = state.apr; A.rows = Array.isArray(rows) ? rows : []; A.sample = !!isSample; drawApprovals();
 }
+function drawApprovals(){
+  const A = state.apr, rows = A.rows, by = $("decidedBy").value.trim();
+  $("aprCount").textContent = rows.length; $("aprSample").hidden = !A.sample;
+  const html = !rows.length ? `<div class="empty">Nothing waiting</div>` : rows.map(r=>{
+    const id = String(r.id ?? ""), q = String(r.qa||"Not checked"), cls = q==="Pass"?"pass":q==="Fail"?"fail":"";
+    const busy = A.pending!==null, off = A.sample || busy || !id ? " disabled" : "";
+    let act;
+    if(A.confirm && A.confirm.id===id && !A.sample){
+      const d = A.confirm.decision;
+      act = `<div class="apract" role="group" aria-label="Confirm ${d}"><span>${d==="approve"?"Approve":"Reject"} this item${by?" as "+esc(by):""}?</span><button type="button" class="btn ${d==="approve"?"go":"no"}" data-act="confirm" data-id="${esc(id)}">Yes, ${d}</button><button type="button" class="btn" data-act="cancel" data-id="${esc(id)}">Cancel</button></div>`;
+    } else {
+      act = `<div class="apract"><button type="button" class="btn go" data-act="ask" data-d="approve" data-id="${esc(id)}"${off}>Approve</button><button type="button" class="btn no" data-act="ask" data-d="reject" data-id="${esc(id)}"${off}>Reject</button>${A.pending===id?"<span>Saving…</span>":""}</div>`;
+    }
+    if(A.sample) act += `<div class="aprnote">sample data: cannot decide</div>`;
+    if(A.err[id]) act += `<div class="aprerr" role="alert">${esc(A.err[id])}</div>`;
+    return `<div class="apr" tabindex="0" role="group" aria-label="${esc(r.title)}"><b>${esc(r.title)}</b><div class="meta"><span>${esc(r.agent)} · ${esc(r.type)}${r.related_job?" · "+esc(r.related_job):""}</span><span class="chip ${cls}">QA ${esc(q)}</span></div>${r.preview?`<p>${esc(r.preview)}</p>`:""}${act}</div>`}).join("");
+  if(html===A.last) return; A.last = html; $("approvals").innerHTML = html;
+  if(A.focus){ const el=document.querySelector('#approvals [data-act="'+A.focus.act+'"][data-id="'+CSS.escape(A.focus.id)+'"]'+(A.focus.d?'[data-d="'+A.focus.d+'"]':"")); if(el) el.focus(); A.focus=null; }
+}
+async function decide(id, decision){
+  const A = state.apr, by = $("decidedBy").value.trim(), row = A.rows.find(r=>String(r.id)===id), title = row ? row.title : id;
+  A.confirm = null; delete A.err[id]; A.pending = id; $("aprMsg").textContent = "Saving decision…"; drawApprovals();
+  try{
+    const r = await call("decide", {id, decision, decided_by:by});
+    if(!r || r.ok!==true) throw new Error("not confirmed");
+    A.rows = A.rows.filter(x=>String(x.id)!==id);   // remove only after ok:true
+    $("aprMsg").textContent = (decision==="approve"?"Approved: ":"Rejected: ")+title;
+  }catch(e){
+    A.err[id] = "Could not "+decision+" ("+(e.message||"error")+"). Nothing was changed here; check Notion before retrying.";
+    $("aprMsg").textContent = "";
+  }finally{ A.pending = null; drawApprovals(); }
+}
+$("decidedBy").value = store.get("jarvis.decidedBy") || "";
+$("decidedBy").addEventListener("input", ()=>{ store.set("jarvis.decidedBy", $("decidedBy").value.trim()); });
+$("approvals").addEventListener("click", e=>{
+  const b = e.target.closest && e.target.closest("button[data-act]"); if(!b || b.disabled) return;
+  const A = state.apr, id = b.dataset.id, act = b.dataset.act;
+  if(A.sample){ $("aprMsg").textContent = "sample data: cannot decide"; return; }
+  if(act==="ask"){
+    if(A.pending!==null) return;
+    delete A.err[id];
+    if(!$("decidedBy").value.trim()){ A.err[id] = "Enter your name in Decided by first."; A.last=null; drawApprovals(); $("decidedBy").focus(); return; }
+    A.confirm = {id, decision:b.dataset.d}; A.focus = {act:"confirm", id}; A.last=null; drawApprovals();
+  } else if(act==="cancel"){
+    const d = A.confirm && A.confirm.decision; A.confirm = null; A.focus = {act:"ask", id, d}; drawApprovals();
+  } else if(act==="confirm" && A.confirm && A.confirm.id===id){
+    decide(id, A.confirm.decision);
+  }
+});
+
+// ---- Weekly report ----
+function bar(label, n, max, errs){
+  const w = max>0 ? Math.max(0, n)/max*100 : 0, ew = max>0 && errs ? errs/max*100 : 0;
+  return `<div class="rbar"><span class="lbl">${esc(label)}</span><span class="trk" aria-hidden="true"><i style="width:${Math.max(0,w-ew)}%"></i>${ew?`<i class="e" style="width:${ew}%"></i>`:""}</span><span class="num">${esc(n)}${errs!==undefined?" / "+esc(errs)+" err":""}</span></div>`;
+}
+function renderReport(d, isSample){
+  const r = d && typeof d==="object" ? d : {}, tag = isSample ? ` <span class="samp-tag" id="repSample">SAMPLE</span>` : "";
+  const obj = o => (o && typeof o==="object") ? o : {}, num = v => Number(v)||0;
+  const agents = Object.entries(obj(r.runs_by_agent)), maxRuns = Math.max(1,...agents.map(([,v])=>num(obj(v).runs)));
+  const ap = obj(r.approvals), apKeys = ["created","approved","rejected","sent","awaiting"], apMax = Math.max(1,...apKeys.map(k=>num(ap[k])));
+  const qa = obj(r.qa), qaKeys = [["pass","Pass"],["fail","Fail"],["not_checked","Not checked"]], qaMax = Math.max(1,...qaKeys.map(([k])=>num(qa[k])));
+  const jobs = obj(r.jobs), js = Object.entries(obj(jobs.by_status)), jMax = Math.max(1,...js.map(([,v])=>num(v)));
+  $("reportView").innerHTML =
+   `<section class="panel wide"><h2>WEEKLY REPORT <i>${esc(r.week_start||"?")} to ${esc(r.week_end||"?")}${tag}</i></h2><div class="kpis"><div><b>${agents.reduce((a,[,v])=>a+num(obj(v).runs),0)}</b>agent runs</div><div><b>${agents.reduce((a,[,v])=>a+num(obj(v).errors),0)}</b>errors</div><div><b>${num(ap.awaiting)}</b>awaiting approval</div><div><b>${num(jobs.flagged)}</b>flagged jobs</div></div>${r.generated_at?`<div class="msg">generated ${esc(r.generated_at)}</div>`:""}</section>`+
+   `<section class="panel"><h2>RUNS BY AGENT <i>runs / errors</i></h2>${agents.length?`<table><thead><tr><th>Agent</th><th>Runs</th><th>Errors</th></tr></thead><tbody>${agents.map(([n,v])=>`<tr><td>${esc(n)}</td><td>${esc(num(obj(v).runs))}</td><td>${esc(num(obj(v).errors))}</td></tr>`).join("")}</tbody></table>`+agents.map(([n,v])=>bar(n,num(obj(v).runs),maxRuns,num(obj(v).errors))).join(""):`<div class="empty">No runs</div>`}</section>`+
+   `<section class="panel"><h2>APPROVALS</h2>${apKeys.map(k=>bar(k[0].toUpperCase()+k.slice(1),num(ap[k]),apMax)).join("")}</section>`+
+   `<section class="panel"><h2>QA</h2>${qaKeys.map(([k,l])=>bar(l,num(qa[k]),qaMax)).join("")}</section>`+
+   `<section class="panel"><h2>JOBS BY STATUS <i>${num(jobs.flagged)} flagged</i></h2>${js.length?js.map(([n,v])=>bar(n,num(v),jMax)).join(""):`<div class="empty">No jobs</div>`}</section>`;
+}
+function setReportOpen(on){
+  $("reportView").hidden = !on; document.querySelector(".main").hidden = on;
+  $("reportBtn").setAttribute("aria-pressed", String(on)); $("reportBtn").textContent = on ? "Dashboard" : "Report";
+}
+$("reportBtn").addEventListener("click", ()=> setReportOpen($("reportView").hidden));
+
 function setWar(on){
   state.war = on; if(typeof reduce!=="undefined" && reduce) requestAnimationFrame(frame); document.body.classList.toggle("war", on);
   $("war").classList.toggle("on", on); $("war").setAttribute("aria-pressed", String(on)); $("warLabel").textContent = "War Mode: " + (on?"ON":"off");
@@ -213,10 +399,11 @@ async function refresh(){
   const [p,a,r,w,lg] = await Promise.all([
     load("pipeline",SAMPLE.pipeline), load("agents",SAMPLE.agents),
     load("rules",SAMPLE.rules), load("warMode",null), load("log",SAMPLE.log)]);
-  let ap, aprSample = false;
+  let ap, aprSample = false, wr, wrSample = false;
   try { ap = await call("approvals"); } catch(e){ ap = SAMPLE.approvals; aprSample = true; }
-  renderApprovals(ap, aprSample);
-  renderPipeline(p); renderAgents(a); renderRules(r); renderLog(lg);
+  try { wr = await call("weeklyReport"); } catch(e){ wr = SAMPLE.weeklyReport; wrSample = true; }
+  renderApprovals(ap, aprSample); renderReport(wr, wrSample);
+  renderPipeline(p, !state.live.pipeline); renderAgents(a); renderRules(r); renderLog(lg);
   if(w && typeof w.enabled==="boolean"){ if(!state.pending && seq===state.warSeq){ state.warKnown=true; setWar(w.enabled); } }
   else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; $("war").removeAttribute("aria-pressed"); }
   $("war").disabled = !state.warKnown || state.pending;
