@@ -62,7 +62,11 @@ Yes, usefully:
 
 Answered by Joshua: "regular" = standard clean; every client signs a contract; recurring clients are on a Stripe subscription that auto-charges on the clean day (every week or every other week) or, for monthly clients, on the day of the first clean; rescheduling does not stop the charge; cancelling needs one week's notice. (An earlier draft wrongly assumed per-visit charging.)
 
-Open: what a monthly client pays each month. Weekly and bi-weekly clients pay the per-visit price on the clean weekday, so there is no five-Friday issue. For monthly clients, confirm the flat monthly amount (for example one Standard Clean price from Estimate Rules). Monthly charge day is set by Joshua, usually mid-month, and stored on the Notion client record.
+Decided: monthly clients pay the standard clean price with no discount (too little time between cleans to make the clean easier). Weekly and bi-weekly clients get a small discount from the standard price, read from Estimate Rules; Jarvis must not invent the discount. Monthly charge day is set by Joshua, usually mid-month, and stored on the Notion client record.
+
+Decided: a new recurring client usually gets a deep clean first (one-time invoice), then the recurring subscription starts. So the first-clean date for the subscription anchor is the first recurring visit, not the deep clean.
+
+Open: the exact weekly/bi-weekly discount values must exist in Estimate Rules (Notion) before the Estimate agent can quote them. If they are not there, ask Makenzie.
 Decided: cancellation and holds are handled by a human. A person confirms every cancellation (one week's notice), and Joshua applies a hold or pause in Stripe (pause collection) or reschedules, depending on the client. n8n never cancels or pauses on its own; it can draft the request into Approvals.
 Decided: failed payments get 2 retries; after the second failure a human steps in and the Finance agent drafts the client message into Approvals (Awaiting Approval).
 Open: Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
