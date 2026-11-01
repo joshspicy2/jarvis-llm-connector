@@ -72,6 +72,7 @@ async function setup(opts = {}) {
       case 'activity-log': return json(data.log);
       case 'chat': return json({ reply: 'pong' });
       case 'approvals': if (data.approvals) return json(data.approvals); break;
+      case 'etsy-sales': if (data.etsy) return json(data.etsy); break;
       case 'weekly-report': if (data.report) return json(data.report); break;
     }
     return route.fulfill({ status: 404, headers: CORS, body: '' });
@@ -444,5 +445,91 @@ test('22. desktop layouts unchanged at 1366x768 and 1920x1080', async () => {
       assert.ok(m.sh <= m.ch && m.sw <= m.cw, `${w}x${h} page scrolls`);
       assert.ok(m.pipe < m.reactor && m.reactor < m.war, `${w}x${h} three-column order`);
     }
+  } finally { await ctx.close(); }
+});
+
+// ---- Etsy sales view ----
+const ETSY = { generated_at: '2026-11-01T09:00:00Z', currency: 'USD',
+  totals: { orders_7d: 4, revenue_7d: 123.4, orders_30d: 15, revenue_30d: 1234.5, avg_order_30d: 82.3 },
+  by_status: { New: 2, Packed: 1, Shipped: 3, Delivered: 8, Issue: 1 },
+  to_ship: [ { order: 'E-1', buyer_first_name: 'Ona', items: '1 x Thing', ship_by: '2026-11-05', overdue: false },
+             { order: 'E-2', buyer_first_name: 'Pia', items: '2 x Other', ship_by: '2026-10-28', overdue: true } ],
+  recent: [ { order: 'E-2', date: '2026-10-30', total: 45.5, status: 'New' }, { order: 'E-1', date: '2026-10-31', total: 20, status: 'Packed' } ],
+  issues: 1 };
+
+test('23. sales view: sample mode is tagged, toggles back, read-only', async () => {
+  const { ctx, page, posts } = await setup({ fail: true });
+  try {
+    await page.waitForFunction(() => document.getElementById('conn').textContent.includes('unreachable'));
+    assert.ok(await page.locator('#salesView').isHidden());
+    await page.click('#salesBtn');
+    assert.ok(await page.locator('#salesView').isVisible());
+    assert.ok(await page.locator('.main').isHidden());
+    assert.equal(await page.getAttribute('#salesBtn', 'aria-pressed'), 'true');
+    await page.waitForSelector('#salesSample');
+    assert.ok(await page.locator('#salesSample').isVisible());
+    assert.match(await page.textContent('#salesView'), /TheLuminousFairy/);
+    assert.ok(await page.locator('#salesView .ship li').count() > 0);
+    assert.ok(await page.locator('#salesView .ship li.over .pill.bad').count() > 0);
+    assert.match(await page.textContent('#etsyStat'), /sample/);
+    await page.click('#reportBtn');   // switching views is exclusive
+    assert.ok(await page.locator('#salesView').isHidden() && await page.locator('#reportView').isVisible());
+    await page.click('#salesBtn');
+    await page.click('#salesBtn');
+    assert.ok(await page.locator('#salesView').isHidden() && await page.locator('.main').isVisible());
+    assert.equal(posts.length, 0);
+  } finally { await ctx.close(); }
+});
+
+test('24. sales view: live data, overdue highlight, MIXED currency, polling only while open', async () => {
+  let hits = 0;
+  const { ctx, page } = await setup({ data: live({ etsy: ETSY }),
+    handlers: { 'etsy-sales:GET': (route, req, json) => { hits++; return json(globalThis.__etsy || ETSY); } } });
+  try {
+    await liveConn(page);
+    await page.waitForFunction(() => document.getElementById('etsyCnt').textContent.trim() === '2');
+    const h0 = hits;
+    await page.evaluate(() => refresh()); await sleep(300);
+    assert.equal(hits, h0, 'no sales poll while hidden');
+    await page.click('#salesBtn');
+    await page.waitForSelector('#salesView .tile');
+    assert.equal(await page.locator('#salesSample').count(), 0);
+    const txt = await page.textContent('#salesView');
+    assert.match(txt, /\$1,234\.50/); assert.match(txt, /\$123\.40/); assert.match(txt, /\$82\.30/);
+    assert.equal(await page.locator('#salesView .sst').count(), 5);
+    assert.ok(await page.locator('#salesView .sst.bad').count() === 1);
+    const first = page.locator('#salesView .ship li').first();
+    assert.match(await first.textContent(), /E-2/); assert.match(await first.textContent(), /Overdue/);
+    assert.ok(await first.evaluate(el => el.classList.contains('over') && getComputedStyle(el).borderLeftWidth === '4px'));
+    assert.equal(await page.locator('#salesView .ship li').nth(1).locator('.pill.bad').count(), 0);
+    assert.equal(await page.locator('#salesView tbody tr').count(), 2);
+    const h1 = hits; await page.evaluate(() => refresh()); await page.waitForFunction(n => true, 0); await sleep(400);
+    assert.ok(hits > h1, 'polled while open');
+    // MIXED
+    const mixed = { ...ETSY, currency: 'MIXED' };
+    await page.route('https://ops.hightidewash.net/webhook/jarvis/etsy-sales', r => r.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(mixed) }));
+    await page.evaluate(() => refreshSales());
+    await page.waitForFunction(() => /Mixed currencies/.test(document.getElementById('salesView').textContent));
+    const t2 = await page.textContent('#salesView');
+    assert.match(t2, /1234\.50/); assert.ok(!/\$/.test(t2));
+  } finally { await ctx.close(); }
+});
+
+test('25. sales view at 390px: no horizontal scroll; desktop unchanged with view closed', async () => {
+  const { ctx, page } = await setup({ data: live({ etsy: ETSY }) });
+  try {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await liveConn(page);
+    await page.click('#salesBtn'); await page.waitForSelector('#salesView .tile');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'sales overflows at 390');
+    assert.ok((await page.locator('#salesBtn').boundingBox()).height >= 39.5);
+    await page.click('#salesBtn');
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const m = await page.evaluate(() => ({ cols: getComputedStyle(document.querySelector('.main')).gridTemplateColumns.split(' ').length,
+      sh: document.documentElement.scrollHeight, ch: document.documentElement.clientHeight, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+    assert.equal(m.cols, 3); assert.ok(m.sh <= m.ch && m.sw <= m.cw);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.click('#salesBtn');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= document.documentElement.clientHeight), 'sales view page-scrolls on desktop');
   } finally { await ctx.close(); }
 });
