@@ -14,8 +14,8 @@ def anyio_backend():
 
 @pytest.mark.anyio
 async def test_missing_key_is_reported(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert "OPENAI_API_KEY is not set" in await server.chatgpt_ask("hi")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert "GEMINI_API_KEY is not set" in await server.gemini_ask("hi")
 
 
 @pytest.mark.anyio

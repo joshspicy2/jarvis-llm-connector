@@ -1,25 +1,24 @@
 # Jarvis LLM connector
 
-A small remote MCP server that lets Claude (claude.ai, Claude Code, Cowork) call Google Gemini and OpenAI ChatGPT.
+A small remote MCP server that lets Claude (claude.ai, Claude Code, Cowork) call Google Gemini. It uses Gemini's free tier, so there is no OpenAI dependency and no billing.
 
 | Tool | What it does |
 | --- | --- |
 | `gemini_research(prompt, model?, use_search?, system?)` | Research with Gemini, grounded in live Google Search. Returns the answer plus source links. |
-| `chatgpt_ask(prompt, model?, system?)` | Ask a ChatGPT model anything, such as coding help. |
-| `second_opinion(report, focus?, model?)` | Have ChatGPT fact-check a report, plan, or code Claude wrote. Ends with a verdict: AGREE, AGREE WITH CHANGES, or DISAGREE. |
+| `gemini_ask(prompt, model?, system?)` | Ask Gemini anything without web search, such as coding help. |
+| `second_opinion(report, focus?, model?)` | Have Gemini (with Google Search) fact-check a report, plan, or code Claude wrote. Ends with a verdict: AGREE, AGREE WITH CHANGES, or DISAGREE. |
 
-API keys are read from environment variables only. Nothing secret lives in this repo.
+The API key is read from an environment variable only. Nothing secret lives in this repo.
 
 ## What you need
 
-- A **Gemini API key** from [Google AI Studio](https://aistudio.google.com/app/apikey).
-- An **OpenAI API key** from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). This is billed separately from a ChatGPT Plus subscription; add a payment method and set a monthly limit under Billing.
+- A free **Gemini API key** from [Google AI Studio](https://aistudio.google.com/app/apikey). The free tier has rate limits; if you hit them you will see a 429 error, and waiting a minute is enough.
 - A host. These steps use the existing Oracle Cloud Ubuntu VM that already runs Caddy for `ops.hightidewash.net`.
 
 ## Quick deploy (recommended)
 
 1. In Squarespace, add an `llm` `A` record pointing at the VM's public IP.
-2. SSH into the VM and run `git clone https://github.com/joshspicy2/jarvis-llm-connector && bash jarvis-llm-connector/deploy/install.sh` (it prompts for the keys, installs everything, and prints your connector URL). The OpenAI key can be skipped; only `gemini_research` works until it's added.
+2. SSH into the VM and run `git clone https://github.com/joshspicy2/jarvis-llm-connector && bash jarvis-llm-connector/deploy/install.sh` (it prompts for the Gemini key, installs everything, and prints your connector URL).
 3. Add the printed URL in claude.ai (see "Add it to Claude" below).
 
 ## Manual deploy on the Oracle VM
@@ -101,12 +100,10 @@ To rotate a key or the secret, edit `/etc/jarvis-llm/env`, run `sudo systemctl r
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | none | Required for `gemini_research`. |
-| `OPENAI_API_KEY` | none | Required for `chatgpt_ask` and `second_opinion`. |
+| `GEMINI_API_KEY` | none | Required. |
 | `CONNECTOR_SECRET` | none | Required, at least 24 characters. Forms part of the URL. |
 | `ALLOWED_HOSTS` | none | Public hostname(s), comma separated. Enables DNS-rebinding protection. |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model; any call can override it. |
-| `OPENAI_MODEL` | `gpt-5` | Default OpenAI model; any call can override it. |
 | `HOST` / `PORT` | `127.0.0.1` / `8787` | Keep it on localhost; Caddy handles the public side. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Per upstream call. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Caps each answer to control cost. |
@@ -119,10 +116,10 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-The tests start the real server and a fake Gemini/OpenAI server (`tests/mock_upstream.py`), then drive it with the official MCP client. No real keys or network calls are used.
+The tests start the real server and a fake Gemini server (`tests/mock_upstream.py`), then drive it with the official MCP client. No real keys or network calls are used.
 
 ## Troubleshooting
 
 - `journalctl -u jarvis-llm -f` shows server logs. Access logs are off on purpose, since the path contains the secret.
-- A tool answer starting with `Error calling Gemini` or `Error calling OpenAI` includes the upstream HTTP status: 400/401 means a bad key, 429 means quota or billing.
+- A tool answer starting with `Error calling Gemini` includes the upstream HTTP status: 400/401 means a bad key, 429 means the free-tier rate limit; wait a minute.
 - `421 Misdirected Request` or `Invalid Host header` means `ALLOWED_HOSTS` doesn't match the hostname in the URL.

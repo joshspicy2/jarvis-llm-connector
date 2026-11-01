@@ -1,4 +1,4 @@
-"""End-to-end test: real MCP client -> connector over HTTP -> mocked Gemini/OpenAI."""
+"""End-to-end test: real MCP client -> connector over HTTP -> mocked Gemini."""
 
 import json
 import os
@@ -46,10 +46,7 @@ def servers():
         PORT=str(srv_port),
         CONNECTOR_SECRET=SECRET,
         GEMINI_API_KEY="test-gemini-key",
-        OPENAI_API_KEY="test-openai-key",
         GEMINI_BASE_URL=f"http://127.0.0.1:{mock_port}/v1beta",
-        OPENAI_BASE_URL=f"http://127.0.0.1:{mock_port}/v1",
-        OPENAI_MODEL="gpt-test",
         ALLOWED_HOSTS=f"127.0.0.1:{srv_port}",
     )
     srv = subprocess.Popen([sys.executable, "server.py"], cwd=ROOT, env=env)
@@ -68,7 +65,7 @@ async def call(base: str, tool: str, args: dict):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {t.name for t in (await session.list_tools()).tools}
-            assert tools == {"gemini_research", "chatgpt_ask", "second_opinion"}
+            assert tools == {"gemini_research", "gemini_ask", "second_opinion"}
             result = await session.call_tool(tool, args)
             return "".join(c.text for c in result.content if c.type == "text")
 
@@ -85,19 +82,23 @@ async def test_gemini_research(servers):
 
 
 @pytest.mark.anyio
-async def test_chatgpt_ask_default_and_override_model(servers):
+async def test_gemini_ask_has_no_search_and_model_override(servers):
     base, mock = servers
-    assert "ChatGPT (gpt-test) says: fix my python" in await call(base, "chatgpt_ask", {"prompt": "fix my python"})
-    assert "ChatGPT (o-custom)" in await call(base, "chatgpt_ask", {"prompt": "hi", "model": "o-custom"})
+    assert "Gemini says: researched 'fix my python'" in await call(base, "gemini_ask", {"prompt": "fix my python"})
+    req = [r for r in httpx.get(f"{mock}/_received").json() if r["api"] == "gemini"][-1]
+    assert "tools" not in req["body"]
+    await call(base, "gemini_ask", {"prompt": "hi", "model": "gemini-custom"})
+    req = [r for r in httpx.get(f"{mock}/_received").json() if r["api"] == "gemini"][-1]
+    assert req["path"].endswith("/models/gemini-custom:generateContent")
 
 
 @pytest.mark.anyio
 async def test_second_opinion_sends_review_instructions(servers):
     base, mock = servers
     await call(base, "second_opinion", {"report": "Deep clean costs $50.", "focus": "pricing"})
-    req = [r for r in httpx.get(f"{mock}/_received").json() if r["api"] == "openai"][-1]
-    assert "reviewing a report" in req["body"]["instructions"]
-    assert req["body"]["input"].startswith("Focus especially on: pricing")
+    req = [r for r in httpx.get(f"{mock}/_received").json() if r["api"] == "gemini"][-1]
+    assert "reviewing a report" in req["body"]["systemInstruction"]["parts"][0]["text"]
+    assert req["body"]["contents"][0]["parts"][0]["text"].startswith("Focus especially on: pricing")
 
 
 def test_wrong_or_missing_secret_is_404(servers):

@@ -2,7 +2,7 @@
 # One-shot installer for the Oracle Ubuntu VM. Clone the repo, then run as a user with sudo:
 #   git clone https://github.com/joshspicy2/jarvis-llm-connector && bash jarvis-llm-connector/deploy/install.sh
 # (before the PR is merged add: -b claude/llm-connector to the clone)
-# Prompts for the Gemini key (and optionally an OpenAI key); nothing is written to the repo.
+# Prompts for the Gemini key; nothing is written to the repo.
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-llm.hightidewash.net}"
@@ -10,7 +10,6 @@ APP=/opt/jarvis-llm-connector
 ENVFILE=/etc/jarvis-llm/env
 
 read -rsp "Gemini API key: " GEMINI_KEY </dev/tty; echo
-read -rsp "OpenAI API key (press Enter to skip for now): " OPENAI_KEY </dev/tty; echo
 [ -n "$GEMINI_KEY" ] || { echo "Gemini key is required"; exit 1; }
 
 sudo apt-get install -y python3-venv git >/dev/null
@@ -26,7 +25,6 @@ if [ ! -f "$ENVFILE" ]; then
   SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
   sudo tee "$ENVFILE" >/dev/null <<ENV
 GEMINI_API_KEY=$GEMINI_KEY
-OPENAI_API_KEY=$OPENAI_KEY
 CONNECTOR_SECRET=$SECRET
 ALLOWED_HOSTS=$DOMAIN
 ENV

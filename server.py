@@ -1,9 +1,9 @@
-"""Jarvis LLM connector: a remote MCP server that lets Claude call Gemini and ChatGPT.
+"""Jarvis LLM connector: a remote MCP server that lets Claude call Google Gemini (free tier).
 
 Tools:
   gemini_research  - research a question with Gemini, grounded in Google Search
-  chatgpt_ask      - ask an OpenAI model anything (coding help, quick answers)
-  second_opinion   - have an OpenAI model fact-check / critique a report Claude wrote
+  gemini_ask       - ask Gemini anything without web search (coding help, quick answers)
+  second_opinion   - have Gemini fact-check / critique a report Claude wrote
 
 Configuration comes only from environment variables (see .env.example).
 """
@@ -23,9 +23,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 
 GEMINI_BASE_URL = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5")
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "180"))
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8000"))
 
@@ -92,40 +90,12 @@ async def call_gemini(prompt: str, model: str, use_search: bool, system: str | N
     return text or "(Gemini returned an empty answer.)"
 
 
-async def call_openai(prompt: str, model: str, instructions: str | None) -> str:
-    key = _require_env("OPENAI_API_KEY")
-    body: dict = {"model": model, "input": prompt, "max_output_tokens": MAX_OUTPUT_TOKENS}
-    if instructions:
-        body["instructions"] = instructions
-
-    data = await _post_json(
-        f"{OPENAI_BASE_URL}/responses",
-        {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        body,
-    )
-
-    parts = []
-    for item in data.get("output", []):
-        if item.get("type") != "message":
-            continue
-        for content in item.get("content", []):
-            if content.get("type") == "output_text":
-                parts.append(content.get("text", ""))
-            elif content.get("type") == "refusal":
-                parts.append(f"(refused) {content.get('refusal', '')}")
-    text = "\n".join(parts).strip()
-    if not text and data.get("status") == "incomplete":
-        reason = (data.get("incomplete_details") or {}).get("reason", "unknown")
-        raise UpstreamError(f"OpenAI response was incomplete ({reason}).")
-    return text or "(ChatGPT returned an empty answer.)"
-
-
 mcp = MCPServer(
     name="jarvis-llm",
     instructions=(
-        "Gives Claude access to Google Gemini and OpenAI ChatGPT. "
-        "Use gemini_research for web-grounded research, chatgpt_ask for coding help or a quick "
-        "answer from another model, and second_opinion to have ChatGPT double-check a report "
+        "Gives Claude access to Google Gemini. "
+        "Use gemini_research for web-grounded research, gemini_ask for coding help or a quick "
+        "answer from another model, and second_opinion to have Gemini double-check a report "
         "before it goes to Joshua."
     ),
 )
@@ -154,34 +124,35 @@ async def gemini_research(
 
 
 @mcp.tool()
-async def chatgpt_ask(prompt: str, model: str | None = None, system: str | None = None) -> str:
-    """Ask an OpenAI ChatGPT model a question, such as for coding help.
+async def gemini_ask(prompt: str, model: str | None = None, system: str | None = None) -> str:
+    """Ask Gemini a question without web search, such as for coding help.
 
     Args:
         prompt: The question or task, with any code or context included.
-        model: OpenAI model id. Defaults to the server's OPENAI_MODEL.
-        system: Optional instructions for the model.
+        model: Gemini model id. Defaults to the server's GEMINI_MODEL.
+        system: Optional system instruction to steer tone or format.
     """
     try:
-        return await call_openai(prompt, model or OPENAI_MODEL, system)
+        return await call_gemini(prompt, model or GEMINI_MODEL, False, system)
     except (UpstreamError, httpx.HTTPError) as e:
-        return f"Error calling OpenAI: {e}"
+        return f"Error calling Gemini: {e}"
 
 
 @mcp.tool()
 async def second_opinion(report: str, focus: str | None = None, model: str | None = None) -> str:
-    """Have ChatGPT fact-check and critique a report, plan, or code that Claude wrote.
+    """Have Gemini fact-check and critique a report, plan, or code that Claude wrote.
 
+    Uses Google Search so claims can be checked against current sources.
     Args:
         report: The full text of the report to review.
         focus: Optional area to concentrate on (for example "pricing math" or "security").
-        model: OpenAI model id. Defaults to the server's OPENAI_MODEL.
+        model: Gemini model id. Defaults to the server's GEMINI_MODEL.
     """
     prompt = report if not focus else f"Focus especially on: {focus}\n\n---\n\n{report}"
     try:
-        return await call_openai(prompt, model or OPENAI_MODEL, SECOND_OPINION_INSTRUCTIONS)
+        return await call_gemini(prompt, model or GEMINI_MODEL, True, SECOND_OPINION_INSTRUCTIONS)
     except (UpstreamError, httpx.HTTPError) as e:
-        return f"Error calling OpenAI: {e}"
+        return f"Error calling Gemini: {e}"
 
 
 class SecretPathGuard:
