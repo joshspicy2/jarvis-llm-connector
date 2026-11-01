@@ -23,7 +23,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 
 GEMINI_BASE_URL = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "180"))
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8000"))
 
@@ -118,7 +118,14 @@ async def gemini_research(
         system: Optional system instruction to steer tone or format.
     """
     try:
-        return await call_gemini(prompt, model or GEMINI_MODEL, use_search, system)
+        try:
+            return await call_gemini(prompt, model or GEMINI_MODEL, use_search, system)
+        except UpstreamError as e:
+            # Free-tier keys often have no Google Search grounding quota; answer without it.
+            if not (use_search and "HTTP 429" in str(e)):
+                raise
+            text = await call_gemini(prompt, model or GEMINI_MODEL, False, system)
+            return "(Google Search quota exhausted, so this answer is NOT web-grounded.)\n\n" + text
     except (UpstreamError, httpx.HTTPError) as e:
         return f"Error calling Gemini: {e}"
 

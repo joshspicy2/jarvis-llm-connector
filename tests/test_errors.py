@@ -41,3 +41,16 @@ def test_short_secret_refused(monkeypatch):
     monkeypatch.setenv("CONNECTOR_SECRET", "short")
     with pytest.raises(SystemExit):
         server.build_app()
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_research_falls_back_when_search_quota_exhausted(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    ok = {"candidates": [{"content": {"parts": [{"text": "plain answer"}]}}]}
+    route = respx.post(url__regex=r".*generateContent").mock(
+        side_effect=[httpx.Response(429, json={"error": "quota"}), httpx.Response(200, json=ok)]
+    )
+    out = await server.gemini_research("q")
+    assert "NOT web-grounded" in out and "plain answer" in out
+    assert "tools" not in route.calls[1].request.content.decode()

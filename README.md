@@ -103,7 +103,7 @@ To rotate a key or the secret, edit `/etc/jarvis-llm/env`, run `sudo systemctl r
 | `GEMINI_API_KEY` | none | Required. |
 | `CONNECTOR_SECRET` | none | Required, at least 24 characters. Forms part of the URL. |
 | `ALLOWED_HOSTS` | none | Public hostname(s), comma separated. Enables DNS-rebinding protection. |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model; any call can override it. |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Default Gemini model; any call can override it. |
 | `HOST` / `PORT` | `127.0.0.1` / `8787` | Keep it on localhost; Caddy handles the public side. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Per upstream call. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Caps each answer to control cost. |
