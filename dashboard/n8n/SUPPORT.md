@@ -24,13 +24,13 @@ Success returns `{status:"drafted", approval_id, needs_human, reason}`.
 - Select the Notion and Anthropic credentials in n8n (left empty in the file).
 - Add `Support` to the Agent Activity Log `Agent` select, and `Support` to the Approvals `Agent` select.
 
-## Running QA (not chained automatically)
-No workflow calls QA for you. Support returns `approval_id`; run QA by hand:
+## QA auto-chain
+After `Create Approval` succeeds, the `Call QA` node (HTTP Request, POST `https://REPLACE_WITH_N8N_BASE/webhook/jarvis/qa`, body `{"approval_id": <new Approvals page id>}`, timeout 10 s, no credentials) asks the QA workflow to check the new row. It is non-blocking: `onError: continueRegularOutput`, so a QA failure, timeout or unreachable QA never blocks the response or changes the result; the flow continues to the activity log and `Respond Drafted`, whose body is unchanged (the QA reply is not used). QA writes only `QA Result` (never Status or Draft); Status stays *Awaiting Approval* for a human. If the QA call fails, the row stays `QA Result: Not checked` and you can run it by hand:
 
 ```
 curl -X POST https://<n8n-host>/webhook/jarvis/qa -H 'content-type: application/json' -d '{"approval_id":"<approval_id>"}'
 ```
-(POST `/jarvis/qa`). Until then the row stays `QA Result: Not checked`.
+Set `REPLACE_WITH_N8N_BASE` to your n8n base URL in the n8n UI, as for Intake. The call is synchronous, so the response may take a few seconds longer while QA runs (capped by the timeout).
 
 ## Anthropic failures
 The Anthropic node uses `onError: continueRegularOutput` with 3 tries, 2000 ms apart. If it still fails or the output cannot be parsed, `Parse reply` falls back to `needs_human: true` with an empty reply; the `Has draft?` check then skips the Approvals row, writes an Activity Log row with Status `Error` and responds HTTP 502 `{status:'error', needs_human:true, reason}`. A non-empty reply is written as usual.

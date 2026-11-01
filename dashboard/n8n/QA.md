@@ -17,7 +17,7 @@ QA never edits Draft and never changes Status. It does not interrupt a human, so
   after the `[estimate-json]` marker (readable text may precede it), else parses the whole Draft as JSON. Rich-text chunks are joined: the Estimator, Support and Marketer workflows write Draft as several rich_text items of <=1900 chars and QA concatenates every item's `plain_text` before parsing (Notion Get Approval uses `simple:false`).
 
 ## Invocation
-Nothing chains to this workflow; the Estimator, Support and Marketer return `approval_id` and you POST it to `/jarvis/qa` (curl above in each workflow's doc):
+The Estimator, Support and Marketer call this workflow automatically after creating a draft (non-blocking, see their docs). You can also POST an `approval_id` to `/jarvis/qa` by hand:
 `curl -X POST https://<n8n-host>/webhook/jarvis/qa -H 'content-type: application/json' -d '{"approval_id":"<id>"}'`
 
 ## Estimate checks done in code

@@ -71,6 +71,8 @@ async function setup(opts = {}) {
       case 'war-mode': return req.method() === 'POST' ? json({ enabled: req.postDataJSON().enabled }) : json(data.war);
       case 'activity-log': return json(data.log);
       case 'chat': return json({ reply: 'pong' });
+      case 'approvals': if (data.approvals) return json(data.approvals); break;
+      case 'weekly-report': if (data.report) return json(data.report); break;
     }
     return route.fulfill({ status: 404, headers: CORS, body: '' });
   });
@@ -259,5 +261,188 @@ test('13. Enter in chat input sends a POST', async () => {
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => /Jarvis: pong/.test(document.getElementById('chatlog').textContent));
     assert.deepEqual(posts.filter(p => p.name === 'chat').map(p => p.body.message), ['status']);
+  } finally { await ctx.close(); }
+});
+
+// ---- extended UI: decide, board, report, phone layout ----
+const APR = [
+  { id: 'p1', title: 'Estimate A', agent: 'Estimator', type: 'Estimate', qa: 'Pass', related_job: '', created: '', preview: 'x' },
+  { id: 'p2', title: 'Reply B', agent: 'Support', type: 'Reply', qa: 'Not checked', related_job: '', created: '', preview: 'y' } ];
+const BOARD = { stages: [
+  { name: 'Booked', cards: [{ id: 'j1', title: 'Job One', sub: 's' }, { id: 'j2', title: 'Job Two', sub: 's' }] },
+  { name: 'In Progress', cards: [] }, { name: 'Paid', cards: [] } ] };
+const live = (extra = {}) => ({ ...FIX, ...extra });
+const liveConn = page => page.waitForFunction(() => document.getElementById('conn').classList.contains('live'));
+const aprReady = page => page.waitForSelector('#approvals .apr');
+
+test('14. decide: two-step confirm, name remembered, removal only after ok', async () => {
+  const { ctx, page, posts } = await setup({ data: live({ approvals: APR }),
+    handlers: { 'approvals/decide:POST': async (route, req, json) => { await sleep(300); return json({ ok: true, id: 'p1', status: 'Approved' }); } } });
+  try {
+    await liveConn(page); await aprReady(page);
+    assert.match(await page.textContent('#approvals'), /Estimate A/);
+    await page.fill('#decidedBy', 'Makenzie');
+    await page.click('#approvals .apr:nth-child(1) [data-act="ask"][data-d="approve"]');
+    assert.equal(posts.filter(p => p.name === 'approvals/decide').length, 0, 'first click must not POST');
+    assert.match(await page.textContent('#approvals .apr:nth-child(1)'), /Approve this item as Makenzie\?/);
+    await page.click('#approvals [data-act="cancel"]');
+    assert.equal(posts.filter(p => p.name === 'approvals/decide').length, 0);
+    await page.click('#approvals .apr:nth-child(1) [data-act="ask"][data-d="approve"]');
+    await page.click('#approvals [data-act="confirm"]');
+    assert.ok(await page.locator('#approvals .apr:nth-child(1) button[data-act="ask"]').first().isDisabled(), 'disabled while pending');
+    assert.equal(await page.locator('#approvals .apr').count(), 2, 'not removed before ok');
+    await page.waitForFunction(() => document.querySelectorAll('#approvals .apr').length === 1);
+    assert.deepEqual(posts.filter(p => p.name === 'approvals/decide').map(p => p.body), [{ id: 'p1', decision: 'approve', decided_by: 'Makenzie' }]);
+    assert.equal(await page.textContent('#aprCount'), '1');
+    await page.reload(); await aprReady(page);
+    assert.equal(await page.inputValue('#decidedBy'), 'Makenzie');
+  } finally { await ctx.close(); }
+});
+
+test('15. decide failure keeps card and shows error; empty name blocked', async () => {
+  const { ctx, page, posts } = await setup({ data: live({ approvals: APR }),
+    handlers: { 'approvals/decide:POST': route => route.fulfill({ status: 500, headers: CORS, body: 'x' }) } });
+  try {
+    await liveConn(page); await aprReady(page);
+    await page.click('#approvals .apr:nth-child(2) [data-act="ask"][data-d="reject"]');
+    assert.match(await page.textContent('#approvals'), /Enter your name/);
+    assert.equal(posts.filter(p => p.name === 'approvals/decide').length, 0);
+    await page.fill('#decidedBy', 'Joshua');
+    await page.click('#approvals .apr:nth-child(2) [data-act="ask"][data-d="reject"]');
+    await page.click('#approvals [data-act="confirm"]');
+    await page.waitForSelector('#approvals .aprerr');
+    assert.equal(await page.locator('#approvals .apr').count(), 2);
+    assert.match(await page.textContent('.aprerr'), /Could not reject/);
+  } finally { await ctx.close(); }
+});
+
+test('16. decide never works on sample data', async () => {
+  const { ctx, page, posts } = await setup({ fail: true });
+  try {
+    await page.waitForFunction(() => document.getElementById('conn').textContent.includes('unreachable'));
+    assert.ok(await page.locator('#aprSample').isVisible());
+    assert.match(await page.textContent('#approvals'), /sample data: cannot decide/);
+    assert.ok(await page.locator('#approvals [data-act="ask"]').first().isDisabled());
+    assert.equal(posts.filter(p => p.name === 'approvals/decide').length, 0);
+  } finally { await ctx.close(); }
+});
+
+test('17. board toggle and Move select, with revert on failure', async () => {
+  let fail = false;
+  const { ctx, page, posts } = await setup({ data: live({ pipeline: BOARD }),
+    handlers: { 'pipeline/move:POST': async (route, req, json) => {
+      if (fail) return route.fulfill({ status: 500, headers: CORS, body: 'x' });
+      const b = req.postDataJSON(); return json({ ok: true, id: b.id, from: 'Booked', to: b.status }); } } });
+  try {
+    await liveConn(page);
+    assert.equal(await page.locator('#pipeline .bcol').count(), 0, 'default is list');
+    await page.click('#viewBoard');
+    assert.equal(await page.getAttribute('#viewBoard', 'aria-pressed'), 'true');
+    assert.deepEqual(await page.locator('#pipeline .bcol h3').allTextContents(), ['Booked2', 'In Progress0', 'Awaiting Invoice0', 'Paid0', 'Flagged0']);
+    await page.selectOption('#pipeline select[data-id="j1"]', 'In Progress');
+    await page.waitForFunction(() => /Moved Job One/.test(document.getElementById('boardMsg').textContent));
+    assert.deepEqual(posts.filter(p => p.name === 'pipeline/move').map(p => p.body), [{ id: 'j1', status: 'In Progress' }]);
+    assert.equal(await page.locator('.bcol[data-stage="In Progress"] .bcard').count(), 1);
+    fail = true;
+    await page.selectOption('#pipeline select[data-id="j2"]', 'Paid');
+    await page.waitForFunction(() => /Could not move Job Two/.test(document.getElementById('boardMsg').textContent));
+    assert.equal(await page.locator('.bcol[data-stage="Booked"] .bcard').count(), 1, 'reverted');
+    assert.equal(await page.locator('.bcol[data-stage="Paid"] .bcard').count(), 0);
+    await page.click('#viewList');
+    assert.equal(await page.locator('#pipeline .stage').count() > 0, true);
+  } finally { await ctx.close(); }
+});
+
+test('18. board drag and drop moves a card', async () => {
+  const { ctx, page, posts } = await setup({ data: live({ pipeline: BOARD }),
+    handlers: { 'pipeline/move:POST': (route, req, json) => json({ ok: true, id: 'j1', from: 'Booked', to: 'Paid' }) } });
+  try {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await liveConn(page); await page.click('#viewBoard');
+    await page.dragAndDrop('.bcard[data-id="j1"] b', '.bcol[data-stage="Paid"]');
+    await page.waitForFunction(() => /Moved Job One/.test(document.getElementById('boardMsg').textContent));
+    assert.deepEqual(posts.filter(p => p.name === 'pipeline/move').map(p => p.body), [{ id: 'j1', status: 'Paid' }]);
+  } finally { await ctx.close(); }
+});
+
+test('19. board is read-only on sample data', async () => {
+  const { ctx, page, posts } = await setup({ fail: true });
+  try {
+    await page.waitForFunction(() => document.getElementById('conn').textContent.includes('unreachable'));
+    await page.click('#viewBoard');
+    assert.match(await page.textContent('#pipeline'), /sample data: cannot move jobs/);
+    assert.ok(await page.locator('#pipeline select').first().isDisabled());
+    assert.equal(await page.locator('#pipeline [draggable="true"]').count(), 0);
+    assert.equal(posts.filter(p => p.name === 'pipeline/move').length, 0);
+  } finally { await ctx.close(); }
+});
+
+test('20. report panel renders sample when unreachable, live when available', async () => {
+  const a = await setup({ fail: true });
+  try {
+    await a.page.waitForFunction(() => document.getElementById('conn').textContent.includes('unreachable'));
+    assert.ok(await a.page.locator('#reportView').isHidden());
+    await a.page.click('#reportBtn');
+    assert.ok(await a.page.locator('#reportView').isVisible());
+    assert.ok(await a.page.locator('#repSample').isVisible());
+    assert.match(await a.page.textContent('#reportView'), /Conductor/);
+    assert.ok(await a.page.locator('#reportView .rbar').count() > 5);
+  } finally { await a.ctx.close(); }
+  const report = { week_start: '2026-02-02', week_end: '2026-02-08', runs_by_agent: { Router: { runs: 5, errors: 1 } },
+    approvals: { created: 3, approved: 2, rejected: 0, sent: 1, awaiting: 1 }, qa: { pass: 2, fail: 0, not_checked: 1 },
+    jobs: { by_status: { Booked: 2 }, flagged: 0 }, generated_at: '2026-02-08T10:00:00Z' };
+  const b = await setup({ data: live({ report }) });
+  try {
+    await liveConn(b.page); await b.page.click('#reportBtn');
+    await b.page.waitForFunction(() => /2026-02-02/.test(document.getElementById('reportView').textContent));
+    assert.equal(await b.page.locator('#repSample').count(), 0);
+    assert.match(await b.page.textContent('#reportView'), /Router/);
+  } finally { await b.ctx.close(); }
+});
+
+test('21. phone 390px: no horizontal scroll, tap targets, War Mode and chat reachable', async () => {
+  const { ctx, page } = await setup({ data: live({ approvals: APR, pipeline: BOARD }) });
+  try {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await liveConn(page); await aprReady(page);
+    for (const view of ['list', 'board']) {
+      if (view === 'board') await page.click('#viewBoard');
+      const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, bw: document.body.scrollWidth, ov: getComputedStyle(document.body).overflow }));
+      assert.ok(m.sw <= m.cw && m.bw <= m.cw, view + ' horizontal overflow ' + JSON.stringify(m));
+    }
+    assert.notEqual(await page.evaluate(() => getComputedStyle(document.body).overflowY), 'hidden');
+    for (const sel of ['#war', '#reportBtn', '#chatform button', '#chatin', '#viewBoard', '#decidedBy', '#approvals [data-act="ask"]', '#pipeline select']) {
+      const h = (await page.locator(sel).first().boundingBox()).height;
+      assert.ok(h >= 39.5, sel + ' height ' + h);
+    }
+    await page.locator('#war').scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('#war').isVisible());
+    await page.click('#war');
+    await page.waitForFunction(() => document.getElementById('warLabel').textContent === 'War Mode: ON');
+    await page.fill('#chatin', 'hi'); await page.click('#chatform button');
+    await page.waitForFunction(() => /Jarvis: pong/.test(document.getElementById('chatlog').textContent));
+    await page.click('#reportBtn');
+    const m2 = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+    assert.ok(m2, 'report overflows at 390');
+  } finally { await ctx.close(); }
+});
+
+test('22. desktop layouts unchanged at 1366x768 and 1920x1080', async () => {
+  const { ctx, page } = await setup();
+  try {
+    await liveConn(page);
+    for (const [w, h] of [[1366, 768], [1920, 1080]]) {
+      await page.setViewportSize({ width: w, height: h });
+      const m = await page.evaluate(() => ({
+        bodyOverflow: getComputedStyle(document.body).overflow, minW: getComputedStyle(document.body).minWidth,
+        cols: getComputedStyle(document.querySelector('.main')).gridTemplateColumns.split(' ').length,
+        sh: document.documentElement.scrollHeight, ch: document.documentElement.clientHeight,
+        sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth,
+        war: document.querySelector('.p-war').getBoundingClientRect().left, pipe: document.querySelector('.p-pipeline').getBoundingClientRect().left,
+        reactor: document.getElementById('reactor').getBoundingClientRect().left }));
+      assert.equal(m.bodyOverflow, 'hidden'); assert.equal(m.minW, '1200px'); assert.equal(m.cols, 3);
+      assert.ok(m.sh <= m.ch && m.sw <= m.cw, `${w}x${h} page scrolls`);
+      assert.ok(m.pipe < m.reactor && m.reactor < m.war, `${w}x${h} three-column order`);
+    }
   } finally { await ctx.close(); }
 });

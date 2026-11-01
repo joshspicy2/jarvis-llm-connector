@@ -15,13 +15,13 @@ Approvals row: Agent Marketer, Type Content, Status Awaiting Approval, QA Result
 Draft = headline, body, hashtags, suggested timing and any `needs_human_reason`. Not truncated: the `Chunk Draft` Code node splits it into rich_text items of <=1900 chars (Notion's per-item limit is 2000) and `Create Approval` is an HTTP Request to the Notion API `POST /v1/pages` (empty `notionApi` credential), since the Notion node writes only one item.
 Unparseable model output still creates a row flagged "NEEDS HUMAN".
 
-## Running QA (not chained automatically)
-No workflow calls QA for you. After a draft is created, run it by hand with the `approval_id` from the response:
+## QA auto-chain
+After `Create Approval` succeeds, the `Call QA` node (HTTP Request, POST `https://REPLACE_WITH_N8N_BASE/webhook/jarvis/qa`, body `{"approval_id": <new Approvals page id>}`, timeout 10 s, no credentials) asks the QA workflow to check the new row. It is non-blocking: `onError: continueRegularOutput`, so a QA failure, timeout or unreachable QA never blocks the response or changes the result; the flow continues to the activity log and `Respond Drafted`, whose body is unchanged (the QA reply is not used). QA writes only `QA Result` (never Status or Draft); Status stays *Awaiting Approval* for a human. If the QA call fails, the row stays `QA Result: Not checked` and you can run it by hand:
 
 ```
 curl -X POST https://<n8n-host>/webhook/jarvis/qa -H 'content-type: application/json' -d '{"approval_id":"<approval_id>"}'
 ```
-(POST `/jarvis/qa`). Until then the Approvals row stays `QA Result: Not checked`.
+Set `REPLACE_WITH_N8N_BASE` to your n8n base URL in the n8n UI, as for Intake. The call is synchronous, so the response may take a few seconds longer while QA runs (capped by the timeout).
 
 ## Anthropic failures
 The Anthropic node uses `onError: continueRegularOutput` with 3 tries, 2000 ms apart. If it still fails or returns nothing usable, `Parse draft` sets a `needs_human` reason and `has_draft` false: no Approvals row is written, an Agent Activity Log row with Status `Error` is, and the caller gets HTTP 502 `{status:'error', needs_human:true, reason}`. A parsed draft with a body is written as usual.
