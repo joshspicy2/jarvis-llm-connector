@@ -1,10 +1,10 @@
-# Billing, subscriptions and contracts (design draft)
+# Billing, autopay and contracts (design draft)
 
 Status: DRAFT for Joshua's review. Nothing here is applied to production. Replaces the QuoteIQ estimates/invoices/contracts role.
 
 ## Goal
 
-Low cost (target: no monthly software fee), we get paid, recurring clients on subscriptions, and true e-signed contracts. Jarvis (n8n + Notion) is the glue. Notion stays the source of truth; Stripe is already in use.
+Low cost (target: no monthly software fee), we get paid, recurring clients autocharged per visit (no Stripe Subscriptions), and true e-signed contracts. Jarvis (n8n + Notion) is the glue. Notion stays the source of truth; Stripe is already in use.
 
 ## Parts
 
@@ -62,10 +62,11 @@ Yes, usefully:
 
 Answered by Joshua: "regular" = standard clean; recurring clients are billed per visit; every client signs a contract; recurring contracts include autopay consent.
 
-1. Because billing is per visit, Stripe should charge a saved payment method per visit (invoice or off-session charge per completed job) rather than a fixed-interval subscription. Confirm whether Joshua still wants Stripe Subscriptions, or per-visit charges with the saved card. Per-visit fits the answer better and needs no proration.
-2. Who triggers each charge: job marked complete in Notion, approved by a human? (Recommended; keeps a human gate on money movement.)
-3. Cancellation and skipped-visit rules (affects Stripe proration and pause settings).
-5. Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
+Decided by Joshua: no Stripe Subscriptions. Every visit is charged automatically to the saved payment method, even when a visit is rescheduled, so clients never have to pull out a card. The charge follows the visit, not a billing calendar.
+
+1. Who triggers each charge: job marked complete in Notion, approved by a human? (Recommended; keeps a human gate on money movement.)
+2. Cancellation and skipped-visit rules (affects Stripe proration and pause settings).
+3. Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
 
 ## Out of scope
 
