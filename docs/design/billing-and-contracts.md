@@ -21,7 +21,7 @@ Low cost (target: no monthly software fee), we get paid, recurring clients on St
 1. Intake/Router creates or updates the client in Notion (Clients DB).
 2. Estimate agent drafts the estimate from Estimate Rules. It lands in Approvals as *Awaiting Approval*. Makenzie approves (nothing client-facing is sent without human approval).
 3. On approval, n8n picks the matching terms template (see below), fills the client fields and sends it for e-signature.
-4. E-sign webhook (signed) reaches n8n. n8n stores the signed PDF link and date on the client's Notion page, then creates the Stripe customer and, for recurring clients, a subscription whose billing day of the month is the day the client chose (`billing_cycle_anchor`), charged automatically to the saved payment method. Standard and deep clean clients get a one-time invoice with a pay link instead.
+4. E-sign webhook (signed) reaches n8n. n8n stores the signed PDF link and date on the client's Notion page, then creates the Stripe customer and, for recurring clients, a subscription anchored to the first clean date and charged automatically to the saved payment method: weekly clients every week, bi-weekly every 2 weeks (same weekday as the clean), monthly clients on the day of month of the first clean. Standard and deep clean clients get a one-time invoice with a pay link instead.
 5. Stripe webhooks (`invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`) post to n8n. Router classifies; failed payments are IMPORTANT, and War Mode rules still apply. Matching into Notion uses the existing Stripe to Notion invoice matching.
 6. Every run is written to the Agent Activity Log.
 
@@ -29,7 +29,7 @@ Human gates: estimate approval (Makenzie), the contract send, and any dunning me
 
 ## Contract/terms templates
 
-Joshua's terms sets: deep clean, monthly, bi-weekly, weekly, and standard (the one-time "regular" clean). A signed contract is required for every client. The three recurring contracts (weekly, bi-weekly, monthly) include explicit autopay consent: the client picks a day of the month, is charged automatically on that day, and is still charged if they reschedule. To cancel, they must give one week's notice before the next charge.
+Joshua's terms sets: deep clean, monthly, bi-weekly, weekly, and standard (the one-time "regular" clean). A signed contract is required for every client. The three recurring contracts (weekly, bi-weekly, monthly) include explicit autopay consent: the subscription charges on the same day as the clean (weekly, bi-weekly) or on the first-clean day of the month (monthly), and the client is still charged if they reschedule. To cancel, they must give one week's notice before the next charge.
 
 Each template has a stable id and a version, kept in the repo so changes are reviewed:
 
@@ -37,9 +37,9 @@ Each template has a stable id and a version, kept in the repo so changes are rev
 |---|---|
 | `deep-clean` | One-time invoice, paid before or at service |
 | `standard` | One-time invoice per visit, paid at or after service (no autopay clause) |
-| `weekly` | Stripe subscription, charged on client's chosen day of month; 1-week cancellation notice |
-| `bi-weekly` | Stripe subscription, charged on client's chosen day of month; 1-week cancellation notice |
-| `monthly` | Stripe subscription, charged on client's chosen day of month; 1-week cancellation notice |
+| `weekly` | Stripe subscription, every week, start = first clean date; 1-week cancellation notice |
+| `bi-weekly` | Stripe subscription, every 2 weeks, start = first clean date; 1-week cancellation notice |
+| `monthly` | Stripe subscription, monthly, on day of first clean, start = first clean date; 1-week cancellation notice |
 
 Template text is not drafted here. Makenzie/Joshua supply the existing wording; do not invent legal terms.
 
@@ -60,9 +60,9 @@ Yes, usefully:
 
 ## Open questions
 
-Answered by Joshua: "regular" = standard clean; every client signs a contract; recurring clients are on a Stripe subscription that auto-charges on a day of the month the client chooses; rescheduling does not stop the charge; cancelling needs one week's notice. (An earlier draft wrongly assumed per-visit charging.)
+Answered by Joshua: "regular" = standard clean; every client signs a contract; recurring clients are on a Stripe subscription that auto-charges on the clean day (every week or every other week) or, for monthly clients, on the day of the first clean; rescheduling does not stop the charge; cancelling needs one week's notice. (An earlier draft wrongly assumed per-visit charging.)
 
-1. What is the recurring amount: visits per month times the visit price (so a month with five Fridays costs more), or a flat monthly price per plan? This sets the Stripe price and the Estimate agent's output.
+1. Weekly and bi-weekly price is the per-visit price on the same weekday as the clean, so there is no five-Friday issue. Monthly clients pay a flat monthly price. Confirm the monthly price comes from Estimate Rules (e.g. one visit price), and check monthly day 29-31 (Stripe moves those charges to the last day of shorter months).
 2. Cancellation: how is the one-week notice enforced? Suggested: the client cancels via the Stripe Customer Portal or by message, a human confirms, and n8n sets `cancel_at` for the next billing date at least 7 days out.
 3. Failed payments: how many retries, and when does a human step in? (Finance agent drafts the client message into Approvals.)
 4. Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
