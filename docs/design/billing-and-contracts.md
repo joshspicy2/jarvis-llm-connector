@@ -66,7 +66,7 @@ Decided: monthly clients pay the standard clean price with no discount (too litt
 
 Decided: a new recurring client usually gets a deep clean first (one-time invoice), then the recurring subscription starts. So the first-clean date for the subscription anchor is the first recurring visit, not the deep clean.
 
-Open: the exact weekly/bi-weekly discount values must exist in Estimate Rules (Notion) before the Estimate agent can quote them. If they are not there, ask Makenzie.
+Placeholders until filled: `REPLACE_WITH_WEEKLY_DISCOUNT` and `REPLACE_WITH_BIWEEKLY_DISCOUNT`. Joshua will provide the real values (reading them from QuoteIQ). They must also exist in Estimate Rules (Notion) before the Estimate agent can quote them.
 Decided: cancellation and holds are handled by a human. A person confirms every cancellation (one week's notice), and Joshua applies a hold or pause in Stripe (pause collection) or reschedules, depending on the client. n8n never cancels or pauses on its own; it can draft the request into Approvals.
 Decided: failed payments get 2 retries; after the second failure a human steps in and the Finance agent drafts the client message into Approvals (Awaiting Approval).
 Open: Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.

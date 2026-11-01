@@ -12,7 +12,7 @@ Stripe subscription, charged automatically to the saved payment method. Charged 
 - Service address: REPLACE_WITH_SERVICE_ADDRESS
 - Service type: Bi-Weekly Recurring
 - Price: REPLACE_WITH_PRICE_FROM_ESTIMATE_RULES
-- Discount from standard price: REPLACE_WITH_DISCOUNT_FROM_ESTIMATE_RULES
+- Discount from standard price: REPLACE_WITH_BIWEEKLY_DISCOUNT
 - Charge day: every other week on the clean weekday, starting REPLACE_WITH_FIRST_RECURRING_VISIT_DATE
 - Autopay consent: REPLACE_WITH_AUTOPAY_CONSENT_TEXT
 
