@@ -1,17 +1,17 @@
-# Billing, autopay and contracts (design draft)
+# Billing, subscriptions and contracts (design draft)
 
 Status: DRAFT for Joshua's review. Nothing here is applied to production. Replaces the QuoteIQ estimates/invoices/contracts role.
 
 ## Goal
 
-Low cost (target: no monthly software fee), we get paid, recurring clients autocharged per visit (no Stripe Subscriptions), and true e-signed contracts. Jarvis (n8n + Notion) is the glue. Notion stays the source of truth; Stripe is already in use.
+Low cost (target: no monthly software fee), we get paid, recurring clients on Stripe subscriptions with autopay, and true e-signed contracts. Jarvis (n8n + Notion) is the glue. Notion stays the source of truth; Stripe is already in use.
 
 ## Parts
 
 | Job | Tool | Cost |
 |---|---|---|
 | Pricing, estimate drafts, clients, status | Notion + Estimate agent | $0 |
-| Saved payment methods, per-visit invoices, card/bank payments | Stripe (Invoicing, Customer Portal) | Stripe processing fees plus a small Billing fee on recurring volume (verify current rates) |
+| Subscriptions, one-time invoices, card/bank payments | Stripe (Billing, Invoicing, Customer Portal) | Stripe processing fees plus a small Billing fee on recurring volume (verify current rates) |
 | E-signed contracts | One of: Documenso (open source, self-hostable), Square free contracts (signing only), or a paid e-sign tool | $0 to verify; see "E-sign options" |
 | Glue and approvals | n8n at `ops.hightidewash.net`, Approvals database | $0 |
 | Public terms pages | hightidewash.net | $0 |
@@ -21,15 +21,15 @@ Low cost (target: no monthly software fee), we get paid, recurring clients autoc
 1. Intake/Router creates or updates the client in Notion (Clients DB).
 2. Estimate agent drafts the estimate from Estimate Rules. It lands in Approvals as *Awaiting Approval*. Makenzie approves (nothing client-facing is sent without human approval).
 3. On approval, n8n picks the matching terms template (see below), fills the client fields and sends it for e-signature.
-4. E-sign webhook (signed) reaches n8n. n8n stores the signed PDF link and date on the client's Notion page, then creates the Stripe customer and saves the payment method (setup with autopay consent for recurring clients). Each completed visit then produces a Stripe invoice, charged automatically for recurring clients and sent as a pay link for standard and deep clean.
-5. Stripe webhooks (`invoice.paid`, `invoice.payment_failed`, `payment_method.detached`) post to n8n. Router classifies; failed payments are IMPORTANT, and War Mode rules still apply. Matching into Notion uses the existing Stripe to Notion invoice matching.
+4. E-sign webhook (signed) reaches n8n. n8n stores the signed PDF link and date on the client's Notion page, then creates the Stripe customer and, for recurring clients, a subscription whose billing day of the month is the day the client chose (`billing_cycle_anchor`), charged automatically to the saved payment method. Standard and deep clean clients get a one-time invoice with a pay link instead.
+5. Stripe webhooks (`invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`) post to n8n. Router classifies; failed payments are IMPORTANT, and War Mode rules still apply. Matching into Notion uses the existing Stripe to Notion invoice matching.
 6. Every run is written to the Agent Activity Log.
 
 Human gates: estimate approval (Makenzie), the contract send, and any dunning message to a client. Joshua approves production changes.
 
 ## Contract/terms templates
 
-Joshua's terms sets: deep clean, monthly, bi-weekly, weekly, and standard (the one-time "regular" clean). A signed contract is required for every client. The three recurring contracts (weekly, bi-weekly, monthly) include explicit autopay consent, so clients know the card or bank account is charged automatically each visit.
+Joshua's terms sets: deep clean, monthly, bi-weekly, weekly, and standard (the one-time "regular" clean). A signed contract is required for every client. The three recurring contracts (weekly, bi-weekly, monthly) include explicit autopay consent: the client picks a day of the month, is charged automatically on that day, and is still charged if they reschedule. To cancel, they must give one week's notice before the next charge.
 
 Each template has a stable id and a version, kept in the repo so changes are reviewed:
 
@@ -37,9 +37,9 @@ Each template has a stable id and a version, kept in the repo so changes are rev
 |---|---|
 | `deep-clean` | One-time invoice, paid before or at service |
 | `standard` | One-time invoice per visit, paid at or after service (no autopay clause) |
-| `weekly` | Charged per visit, autopay consent in contract |
-| `bi-weekly` | Charged per visit, autopay consent in contract |
-| `monthly` | Charged per visit, autopay consent in contract |
+| `weekly` | Stripe subscription, charged on client's chosen day of month; 1-week cancellation notice |
+| `bi-weekly` | Stripe subscription, charged on client's chosen day of month; 1-week cancellation notice |
+| `monthly` | Stripe subscription, charged on client's chosen day of month; 1-week cancellation notice |
 
 Template text is not drafted here. Makenzie/Joshua supply the existing wording; do not invent legal terms.
 
@@ -60,13 +60,12 @@ Yes, usefully:
 
 ## Open questions
 
-Answered by Joshua: "regular" = standard clean; recurring clients are billed per visit; every client signs a contract; recurring contracts include autopay consent.
+Answered by Joshua: "regular" = standard clean; every client signs a contract; recurring clients are on a Stripe subscription that auto-charges on a day of the month the client chooses; rescheduling does not stop the charge; cancelling needs one week's notice. (An earlier draft wrongly assumed per-visit charging.)
 
-Decided by Joshua: no Stripe Subscriptions. Every visit is charged automatically to the saved payment method, even when a visit is rescheduled, so clients never have to pull out a card. The charge follows the visit, not a billing calendar.
-
-1. Who triggers each charge: job marked complete in Notion, approved by a human? (Recommended; keeps a human gate on money movement.)
-2. Cancellation and skipped-visit rules (affects Stripe proration and pause settings).
-3. Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
+1. What is the recurring amount: visits per month times the visit price (so a month with five Fridays costs more), or a flat monthly price per plan? This sets the Stripe price and the Estimate agent's output.
+2. Cancellation: how is the one-week notice enforced? Suggested: the client cancels via the Stripe Customer Portal or by message, a human confirms, and n8n sets `cancel_at` for the next billing date at least 7 days out.
+3. Failed payments: how many retries, and when does a human step in? (Finance agent drafts the client message into Approvals.)
+4. Stripe Invoices/Clients property names in Notion are not verified (`docs/NOTION-SCHEMA.md`); check before building any workflow.
 
 ## Out of scope
 
