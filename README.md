@@ -1,125 +1,87 @@
-# Jarvis LLM connector
+# Jarvis
 
-A small remote MCP server that lets Claude (claude.ai, Claude Code, Cowork) call Google Gemini. It uses Gemini's free tier, so there is no OpenAI dependency and no billing.
+Jarvis is the AI operations system for **High Tide Wash**, a family interior cleaning business. Notion is the single
+source of truth. Agents draft; humans decide: **nothing client-facing is sent without human approval.**
 
-| Tool | What it does |
-| --- | --- |
-| `gemini_research(prompt, model?, use_search?, system?)` | Research with Gemini, grounded in live Google Search. Returns the answer plus source links. |
-| `gemini_ask(prompt, model?, system?)` | Ask Gemini anything without web search, such as coding help. |
-| `second_opinion(report, focus?, model?)` | Have Gemini (with Google Search) fact-check a report, plan, or code Claude wrote. Ends with a verdict: AGREE, AGREE WITH CHANGES, or DISAGREE. |
+> Repo name note: an earlier plan (a Python MCP server exposing Gemini and ChatGPT) was meant to live here, but that
+> code is not in this repo (see `git log` and the tree).
 
-The API key is read from an environment variable only. Nothing secret lives in this repo.
+## Status and limits
+- Nothing is deployed. The n8n workflows have not yet been imported or run against live n8n or Notion.
+- The dashboard works locally and falls back to clearly tagged sample data when endpoints are unreachable.
+- Operator steps (import, credentials, hosting): `docs/RUNBOOK.md`. Never put secrets in this repo.
 
-## What you need
+## Repo map
+- `dashboard/` : static, no-build ops dashboard (`index.html`, `config.js`, `_headers`); see `dashboard/README.md`.
+- `dashboard/n8n/` : importable n8n workflows (no credentials), each with a `.md` setup note (`README.md` covers the API one):
+  - `jarvis-dashboard-api.json` : the seven `/webhook/jarvis/...` endpoints the dashboard calls, backed by Notion.
+  - `router-workflow.json` : classifies inbound events (FIRE / IMPORTANT / ROUTINE / AWARENESS) and names an owner.
+  - `estimator-workflow.json` : turns a request into a DRAFT estimate for approval.
+  - `conductor-workflow.json` : daily brief (Needs You / What Moved / Watch).
+  - `marketer-workflow.json` : drafts social/email content; never posts.
+  - `support-workflow.json` : drafts client replies; never sends.
+  - `qa-workflow.json` : deterministic checks on drafts, no LLM call.
+  - `shield-ops-workflow.json` : read-only health check every 15 minutes.
+- `estimator/` : pure-stdlib Python estimate calculator driven by Estimate Rules rows, with tests.
+- `scripts/` : `validate_workflows.py` (n8n JSON checks), its tests, and `worktrees.sh` (track worktrees).
+- `tests/` : `dashboard/smoke.test.js` (Playwright) and `n8n/code_nodes.test.js` (n8n Code-node tests).
+- `docs/` : design and process docs (below), plus `design/` and `reviews/`.
+- `.claude/agents/` : one definition file per agent (11).
+- `.github/workflows/ci.yml` : CI running the checks below.
 
-- A free **Gemini API key** from [Google AI Studio](https://aistudio.google.com/app/apikey). The free tier has rate limits; if you hit them you will see a 429 error, and waiting a minute is enough.
-- A host. These steps use the existing Oracle Cloud Ubuntu VM that already runs Caddy for `ops.hightidewash.net`.
-
-## Quick deploy (recommended)
-
-1. In Squarespace, add an `llm` `A` record pointing at the VM's public IP.
-2. SSH into the VM and run `git clone https://github.com/joshspicy2/jarvis-llm-connector && bash jarvis-llm-connector/deploy/install.sh` (it prompts for the Gemini key, installs everything, and prints your connector URL).
-3. Add the printed URL in claude.ai (see "Add it to Claude" below).
-
-## Manual deploy on the Oracle VM
-
-1. **DNS.** In Squarespace, add an `A` record for `llm` pointing at the VM's public IP (the same IP `ops` uses).
-
-2. **Install the code.** SSH into the VM:
-
-   ```bash
-   sudo apt-get install -y python3-venv git
-   sudo useradd --system --no-create-home jarvis-llm
-   sudo git clone https://github.com/joshspicy2/jarvis-llm-connector.git /opt/jarvis-llm-connector
-   cd /opt/jarvis-llm-connector
-   sudo python3 -m venv .venv
-   sudo .venv/bin/pip install -r requirements.txt
-   ```
-
-   If the repo is private, clone it with a GitHub deploy key or a fine-grained token, or `scp` the folder up.
-
-3. **Add the keys.** Never commit these.
-
-   ```bash
-   sudo mkdir -p /etc/jarvis-llm
-   sudo cp .env.example /etc/jarvis-llm/env
-   python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # copy this into CONNECTOR_SECRET
-   sudo nano /etc/jarvis-llm/env                                    # fill in both API keys and CONNECTOR_SECRET
-   sudo chown root:jarvis-llm /etc/jarvis-llm/env
-   sudo chmod 640 /etc/jarvis-llm/env
-   ```
-
-4. **Run it as a service.**
-
-   ```bash
-   sudo cp deploy/jarvis-llm.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now jarvis-llm
-   curl http://127.0.0.1:8787/health        # prints: ok
-   ```
-
-5. **Put it behind Caddy.** Append `deploy/Caddyfile.snippet` to `/etc/caddy/Caddyfile`, then:
-
-   ```bash
-   sudo systemctl reload caddy
-   curl https://llm.hightidewash.net/health   # prints: ok (Caddy gets the HTTPS cert automatically)
-   ```
-
-   Ports 80 and 443 are already open on the VM for `ops`, so no Oracle security-list changes are needed.
-
-Your connector URL is:
-
+## How the pieces fit
 ```
-https://llm.hightidewash.net/<CONNECTOR_SECRET>/mcp
+ Dashboard (static) --HTTPS--> n8n webhooks --> Notion (source of truth)
+                                    ^                |
+   inbound events --> Router --> Conductor --> Estimator / Marketer / Support
+                                    |                |
+                                   QA  <-- drafts ---+--> "Awaiting Approval" --> human
+                          Shield/Ops watches flags, errors, cost
+```
+Every run is logged to the Agent Activity Log, which the dashboard displays. War Mode (a Notion System Flag) limits
+interruptions to FIRE-level items.
+
+## Quickstart
+Run the dashboard locally (from the repo root):
+```
+cd dashboard && python3 -m http.server 8000
+# open http://localhost:8000
+```
+With no reachable n8n, panels show tagged sample data (the header badge shows live / partial / sample).
+
+Run all checks (needs Python 3 and Node 22; the dashboard smoke test also needs the `playwright` npm package with a
+Chromium browser, and a free port 8791):
+```
+python3 scripts/validate_workflows.py
+python3 -I scripts/test_validate_workflows.py
+python3 -m unittest estimator.test_estimate
+node --test 'tests/n8n/*.test.js'
+node tests/dashboard/smoke.test.js
 ```
 
-Treat that URL like a password. Anyone with it can spend your API credits. Any other path returns 404.
+## Agent roster
+Details, handoffs and human gates: `docs/AGENT-WORKFLOW.md` (draft; several roles are marked proposed).
+- **Conductor** : sequences handoffs, tracks job state, writes the daily brief.
+- **Router** : classifies each inbound event and picks the owner agent.
+- **Estimator** : builds a priced estimate from intake and Estimate Rules.
+- **Marketer** : drafts social, ad and email content (Phase 2).
+- **Builder** : assembles n8n workflows, Notion schema changes, integrations.
+- **Support** : drafts client replies, follow-up nudges and payment reminders.
+- **QA** : checks other agents' output before it reaches a human.
+- **Engineer** : technical design, infra and reliability; decides how.
+- **Researcher** : read-only outside research, with sources.
+- **Developer** : writes and tests code (dashboard, connectors, scripts).
+- **Shield/Ops** : War Mode, budget caps, alerts, backups, secret hygiene, kill switch.
 
-## Add it to Claude
+## Docs
+- `docs/AGENT-WORKFLOW.md` : ground rules, roster, handoffs.
+- `docs/NOTION-SCHEMA.md` : Notion data model and the proposed Approvals database.
+- `docs/RUNBOOK.md` : operator runbook (n8n, Caddy, hosting).
+- `docs/WORKFLOW-TRACKS.md` : business track vs. development track.
+- `docs/CI.md` : the CI workflow.
+- `docs/design/router-and-estimator.md` : Router and Estimator design.
+- `docs/reviews/pr2-qa-review.md` : QA review of PR #2.
 
-1. Open [claude.ai/settings/connectors](https://claude.ai/settings/connectors) (Settings → Connectors).
-2. Click **Add custom connector**.
-3. Name it `Jarvis LLM` and paste the connector URL above. Leave the OAuth fields empty.
-4. Click **Add**. In a chat, enable it from the tools menu (the sliders icon) and allow the three tools.
+## LLM connector (Gemini MCP server)
 
-The same connector then appears in Claude Code on the web and Cowork for your account. For local Claude Code you can also run:
-
-```bash
-claude mcp add --transport http jarvis-llm https://llm.hightidewash.net/<CONNECTOR_SECRET>/mcp
-```
-
-## Updating
-
-```bash
-cd /opt/jarvis-llm-connector && sudo git pull && sudo .venv/bin/pip install -r requirements.txt && sudo systemctl restart jarvis-llm
-```
-
-To rotate a key or the secret, edit `/etc/jarvis-llm/env`, run `sudo systemctl restart jarvis-llm`, and (for a new secret) update the URL in Claude's connector settings.
-
-## Configuration
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | none | Required. |
-| `CONNECTOR_SECRET` | none | Required, at least 24 characters. Forms part of the URL. |
-| `ALLOWED_HOSTS` | none | Public hostname(s), comma separated. Enables DNS-rebinding protection. |
-| `GEMINI_MODEL` | `gemini-3.8-flash` | Default Gemini model; any call can override it. |
-| `HOST` / `PORT` | `127.0.0.1` / `8787` | Keep it on localhost; Caddy handles the public side. |
-| `REQUEST_TIMEOUT_SECONDS` | `180` | Per upstream call. |
-| `MAX_OUTPUT_TOKENS` | `8000` | Caps each answer to control cost. |
-
-## Local development and tests
-
-```bash
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt
-pytest -q
-```
-
-The tests start the real server and a fake Gemini server (`tests/mock_upstream.py`), then drive it with the official MCP client. No real keys or network calls are used.
-
-## Troubleshooting
-
-- `journalctl -u jarvis-llm -f` shows server logs. Access logs are off on purpose, since the path contains the secret.
-- A tool answer starting with `Error calling Gemini` includes the upstream HTTP status: 400/401 means a bad key, 429 means the free-tier rate limit; wait a minute.
-- `421 Misdirected Request` or `Invalid Host header` means `ALLOWED_HOSTS` doesn't match the hostname in the URL.
+The Python MCP server that gives Claude Gemini tools (`server.py`, `deploy/`, `tests/test_*.py`) lives in this repo too. See [CONNECTOR.md](CONNECTOR.md) for setup and [docs/FREELLMAPI.md](docs/FREELLMAPI.md) for the optional free-provider tool.

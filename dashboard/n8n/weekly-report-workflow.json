@@ -1,0 +1,227 @@
+{
+ "name": "Jarvis Weekly Report",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/weekly-report",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Weekly Report GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    200
+   ],
+   "webhookId": "jarvis-weeklyreport"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {},
+    "simple": false
+   },
+   "name": "Notion Activity Log",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    240,
+    0
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "a807f4c25dfe4ce388626726b7d99f6d",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {},
+    "simple": false
+   },
+   "name": "Notion Approvals",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    240,
+    200
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "6cc3d9aad6d14fa39377673274a4cc5f",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {},
+    "simple": false
+   },
+   "name": "Notion Pipeline",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    240,
+    400
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "numberInputs": 3
+   },
+   "name": "Wait for all three",
+   "type": "n8n-nodes-base.merge",
+   "typeVersion": 3,
+   "position": [
+    480,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Weekly report: read-only aggregation. Counts only; no names, titles, drafts or notes are ever output.\nconst TZ = \"America/New_York\";\nconst rows = name => { let items = []; try { items = $(name).all(); } catch (e) { items = []; } return items.map(i => i && i.json).filter(j => j && j.id); };\nconst props = p => (p && typeof p.properties === \"object\" && p.properties) || {};\nconst text = v => !v ? \"\" : Array.isArray(v.title) ? v.title.map(t => t.plain_text || \"\").join(\"\") : Array.isArray(v.rich_text) ? v.rich_text.map(t => t.plain_text || \"\").join(\"\")\n  : v.select ? (v.select.name || \"\") : v.status ? (v.status.name || \"\") : \"\";\nconst find = (p, re) => { const pr = props(p); for (const k in pr) if (re.test(k)) return pr[k]; return null; };\nconst sel = (p, re) => String(text(find(p, re))).trim();\n\nconst fmt = new Intl.DateTimeFormat(\"en-CA\", { timeZone: TZ, year: \"numeric\", month: \"2-digit\", day: \"2-digit\", hour: \"2-digit\", hourCycle: \"h23\" });\nconst parts = t => { const o = {}; for (const x of fmt.formatToParts(new Date(t))) o[x.type] = x.value; return o; };\nconst ymdOf = t => { const o = parts(t); return o.year + \"-\" + o.month + \"-\" + o.day; };\nconst addDays = (ymd, n) => { const [y, m, d] = ymd.split(\"-\").map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };\nconst midnight = ymd => { // instant of 00:00 America/New_York on ymd\n  const [y, m, d] = ymd.split(\"-\").map(Number); const base = Date.UTC(y, m - 1, d);\n  for (const h of [4, 5, 6]) { const t = base + h * 3600000; const o = parts(t); if (o.year + \"-\" + o.month + \"-\" + o.day === ymd && Number(o.hour) === 0) return t; }\n  return base + 5 * 3600000;\n};\nconst nowMs = Date.now();\nconst week_end = ymdOf(nowMs), week_start = addDays(week_end, -6);\nconst lo = midnight(week_start), hi = midnight(addDays(week_end, 1)); // [lo, hi)\n\nconst toMs = s => { // ISO string -> ms; date-only means midnight New York; null when unusable\n  if (typeof s !== \"string\" || !s) return null;\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return midnight(s);\n  const t = Date.parse(s); return Number.isNaN(t) ? null : t;\n};\nconst inWin = ms => ms !== null && ms >= lo && ms < hi;\nconst dateOf = (p, re) => { const v = find(p, re); return v && v.date ? toMs(v.date.start) : null; };\nconst createdOf = p => { // created_time on the page, else a Created property\n  const c = toMs(p.created_time); if (c !== null) return c;\n  const v = find(p, /^created$/i); return v && typeof v.created_time === \"string\" ? toMs(v.created_time) : null;\n};\n\n// Agents\nconst KNOWN = [\"Conductor\", \"Router\", \"Estimator\", \"Marketer\", \"Builder\", \"Support\", \"QA\", \"Engineer\", \"Researcher\", \"Developer\", \"Shield/Ops\"];\nconst alias = { Estimate: \"Estimator\", Content: \"Marketer\", Integrator: \"Conductor\" };\nconst runs_by_agent = {};\nfor (const n of KNOWN) runs_by_agent[n] = { runs: 0, errors: 0 };\nfor (const p of rows(\"Notion Activity Log\")) {\n  const ms = dateOf(p, /^timestamp$/i) ?? createdOf(p);\n  if (!inWin(ms)) continue;\n  let a = sel(p, /^agent$/i).replace(/ Agent$/, \"\").slice(0, 40);\n  if (Object.prototype.hasOwnProperty.call(alias, a)) a = alias[a];\n  if (!a || a === \"__proto__\") a = \"Unknown\";\n  if (!Object.prototype.hasOwnProperty.call(runs_by_agent, a)) runs_by_agent[a] = { runs: 0, errors: 0 };\n  runs_by_agent[a].runs++;\n  if (sel(p, /^status$/i) === \"Error\") runs_by_agent[a].errors++;\n}\n\n// Approvals\nconst approvals = { created: 0, approved: 0, rejected: 0, sent: 0, awaiting: 0 };\nconst qa = { pass: 0, fail: 0, not_checked: 0 };\nfor (const p of rows(\"Notion Approvals\")) {\n  const status = sel(p, /^status$/i);\n  const created = createdOf(p);\n  if (inWin(created)) {\n    approvals.created++;\n    if (status === \"Awaiting Approval\") approvals.awaiting++;\n    const q = sel(p, /^qa result$/i);\n    if (q === \"Pass\") qa.pass++; else if (q === \"Fail\") qa.fail++; else qa.not_checked++;\n  }\n  if (inWin(dateOf(p, /^decided at$/i))) {\n    if (status === \"Approved\") approvals.approved++;\n    else if (status === \"Rejected\") approvals.rejected++;\n    else if (status === \"Sent\") approvals.sent++;\n  }\n}\n\n// Pipeline (by created_time)\nconst by_status = { \"Booked\": 0, \"In Progress\": 0, \"Awaiting Invoice\": 0, \"Paid\": 0, \"Flagged\": 0 };\nfor (const p of rows(\"Notion Pipeline\")) {\n  if (!inWin(createdOf(p))) continue;\n  let s = sel(p, /^status$/i).slice(0, 40);\n  if (!s || s === \"__proto__\") s = \"Unknown\";\n  by_status[s] = (by_status[s] || 0) + 1;\n}\nconst jobs = { by_status, flagged: by_status[\"Flagged\"] };\n\nreturn [{ json: { body: { week_start, week_end, runs_by_agent, approvals, qa, jobs, generated_at: new Date(nowMs).toISOString() } } }];\n"
+   },
+   "name": "Build report",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    700,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Weekly Report",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    920,
+    200
+   ]
+  }
+ ],
+ "connections": {
+  "Weekly Report GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Activity Log",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Notion Approvals",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Notion Pipeline",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Activity Log": {
+   "main": [
+    [
+     {
+      "node": "Wait for all three",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Approvals": {
+   "main": [
+    [
+     {
+      "node": "Wait for all three",
+      "type": "main",
+      "index": 1
+     }
+    ]
+   ]
+  },
+  "Notion Pipeline": {
+   "main": [
+    [
+     {
+      "node": "Wait for all three",
+      "type": "main",
+      "index": 2
+     }
+    ]
+   ]
+  },
+  "Wait for all three": {
+   "main": [
+    [
+     {
+      "node": "Build report",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build report": {
+   "main": [
+    [
+     {
+      "node": "Respond Weekly Report",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ }
+}

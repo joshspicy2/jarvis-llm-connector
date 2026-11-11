@@ -1,0 +1,116 @@
+{
+ "name": "Jarvis Etsy Sales",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/etsy-sales",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Etsy Sales GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-etsy-sales"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_ETSY_ORDERS_DB_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {},
+    "simple": false
+   },
+   "name": "Notion Etsy Orders",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    240,
+    0
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Etsy sales: read-only aggregation. Output has buyer first name only; never addresses, emails, tracking, carrier, notes or drafts.\nconst TZ = \"America/New_York\";\nlet items = [];\ntry { items = $(\"Notion Etsy Orders\").all(); } catch (e) { items = []; }\nconst rows = items.map(i => i && i.json).filter(j => j && j.id); // drops alwaysOutputData placeholders\nconst props = p => (p && typeof p.properties === \"object\" && p.properties) || {};\nconst text = v => !v ? \"\" : Array.isArray(v.title) ? v.title.map(t => (t && t.plain_text) || \"\").join(\"\") : Array.isArray(v.rich_text) ? v.rich_text.map(t => (t && t.plain_text) || \"\").join(\"\")\n  : v.select ? (v.select.name || \"\") : v.status ? (v.status.name || \"\") : \"\";\nconst find = (p, re) => { const pr = props(p); for (const k in pr) if (re.test(k)) return pr[k]; return null; };\nconst str = (p, re) => String(text(find(p, re))).trim();\nconst numOf = v => { // number property, else rich text / title like \"$1,234.50\"; null when unusable\n  if (!v) return null;\n  if (typeof v.number === \"number\" && Number.isFinite(v.number)) return v.number;\n  const s = text(v).replace(/[^0-9.\\-]/g, \"\");\n  if (!/\\d/.test(s)) return null;\n  const n = parseFloat(s); return Number.isFinite(n) ? n : null;\n};\nconst round2 = n => Math.round(n * 100) / 100;\n\nconst fmt = new Intl.DateTimeFormat(\"en-CA\", { timeZone: TZ, year: \"numeric\", month: \"2-digit\", day: \"2-digit\", hour: \"2-digit\", hourCycle: \"h23\" });\nconst parts = t => { const o = {}; for (const x of fmt.formatToParts(new Date(t))) o[x.type] = x.value; return o; };\nconst ymdOf = t => { const o = parts(t); return o.year + \"-\" + o.month + \"-\" + o.day; };\nconst addDays = (ymd, n) => { const [y, m, d] = ymd.split(\"-\").map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };\nconst midnight = ymd => { // instant of 00:00 America/New_York on ymd\n  const [y, m, d] = ymd.split(\"-\").map(Number); const base = Date.UTC(y, m - 1, d);\n  for (const h of [4, 5, 6]) { const t = base + h * 3600000; const o = parts(t); if (o.year + \"-\" + o.month + \"-\" + o.day === ymd && Number(o.hour) === 0) return t; }\n  return base + 5 * 3600000;\n};\nconst nowMs = Date.now();\nconst today = ymdOf(nowMs);\nconst hi = midnight(addDays(today, 1));\nconst lo7 = midnight(addDays(today, -6)), lo30 = midnight(addDays(today, -29)); // [lo, hi), today included\n\nconst toMs = s => { // ISO string -> ms; date-only means midnight New York; null when unusable\n  if (typeof s !== \"string\" || !s) return null;\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) { const t = Date.parse(s + \"T00:00:00Z\"); return Number.isNaN(t) ? null : midnight(s); }\n  const t = Date.parse(s); return Number.isNaN(t) ? null : t;\n};\nconst dateMs = (p, re) => { const v = find(p, re); return v && v.date ? toMs(v.date.start) : null; };\nconst dayOf = ms => (ms === null ? null : ymdOf(ms));\n\nconst STATUSES = [\"New\", \"Packed\", \"Shipped\", \"Delivered\", \"Issue\"];\nconst by_status = {}; for (const s of STATUSES) by_status[s] = 0;\nconst tot = { orders_7d: 0, revenue_7d: 0, orders_30d: 0, revenue_30d: 0 };\nconst currencies = new Set();\nconst toShip = [], recent = [];\nfor (const p of rows) {\n  const status = str(p, /^status$/i);\n  if (STATUSES.includes(status)) by_status[status]++;\n  const cur = str(p, /^currency$/i).toUpperCase().slice(0, 8);\n  if (cur) currencies.add(cur);\n  const orderId = str(p, /^order id$/i).slice(0, 60);\n  const total = numOf(find(p, /^total$/i));\n  const odMs = dateMs(p, /^order date$/i);\n  if (odMs !== null) {\n    if (odMs >= lo30 && odMs < hi) { tot.orders_30d++; tot.revenue_30d += total || 0; }\n    if (odMs >= lo7 && odMs < hi) { tot.orders_7d++; tot.revenue_7d += total || 0; }\n    recent.push({ order: orderId, date: dayOf(odMs), total: total === null ? null : round2(total), status: status, ms: odMs });\n  }\n  if (status === \"New\" || status === \"Packed\") {\n    const sbMs = dateMs(p, /^ship by$/i);\n    const shipBy = dayOf(sbMs);\n    toShip.push({\n      order: orderId,\n      buyer_first_name: str(p, /^buyer first name$/i).split(/\\s+/)[0].slice(0, 60),\n      items: str(p, /^items summary$/i).replace(/\\s+/g, \" \").slice(0, 200),\n      ship_by: shipBy,\n      overdue: shipBy !== null && shipBy < today,\n    });\n  }\n}\ntoShip.sort((a, b) => (a.ship_by === null) - (b.ship_by === null) || (a.ship_by || \"\").localeCompare(b.ship_by || \"\") || a.order.localeCompare(b.order));\nrecent.sort((a, b) => b.ms - a.ms || a.order.localeCompare(b.order));\nconst currency = currencies.size === 0 ? null : currencies.size === 1 ? [...currencies][0] : \"MIXED\";\nconst totals = { orders_7d: tot.orders_7d, revenue_7d: round2(tot.revenue_7d), orders_30d: tot.orders_30d, revenue_30d: round2(tot.revenue_30d),\n  avg_order_30d: tot.orders_30d ? round2(tot.revenue_30d / tot.orders_30d) : 0 };\nreturn [{ json: { body: {\n  generated_at: new Date(nowMs).toISOString(), currency, totals, by_status,\n  to_ship: toShip.slice(0, 20),\n  recent: recent.slice(0, 10).map(r => ({ order: r.order, date: r.date, total: r.total, status: r.status })),\n  issues: by_status.Issue,\n} } }];\n"
+   },
+   "name": "Build sales",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    480,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Etsy Sales",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    720,
+    0
+   ]
+  }
+ ],
+ "connections": {
+  "Etsy Sales GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Etsy Orders",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Etsy Orders": {
+   "main": [
+    [
+     {
+      "node": "Build sales",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build sales": {
+   "main": [
+    [
+     {
+      "node": "Respond Etsy Sales",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ }
+}

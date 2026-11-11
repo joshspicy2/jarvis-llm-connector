@@ -1,0 +1,1234 @@
+{
+ "name": "Jarvis Etsy Orders",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/etsy/order",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Etsy Order Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-etsy-order"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Shared-secret check for non-browser callers (Etsy/Zapier/email forward). Fails closed: no env var set means reject.\nconst j = $input.first().json;\nconst headers = j.headers || {};\nconst got = typeof headers['x-jarvis-secret'] === 'string' ? headers['x-jarvis-secret'] : '';\nlet expected = '';\ntry { expected = String($env.JARVIS_INTAKE_SECRET || ''); } catch (e) { expected = ''; }\nlet ok = expected.length > 0 && got.length === expected.length;\nif (ok) { let d = 0; for (let i = 0; i < got.length; i++) d |= got.charCodeAt(i) ^ expected.charCodeAt(i); ok = d === 0; }\nreturn [{ json: { authorized: ok, body: ok ? (j.body || {}) : {} } }];\n"
+   },
+   "name": "Check Secret A",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.authorized }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Authorized A?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, error: 'unauthorized' }) }}",
+    "options": {
+     "responseCode": 401
+    }
+   },
+   "name": "Respond Unauthorized A",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const b = $input.first().json.body;\nconst clean = (v, max) => (typeof v === 'string' ? v.replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, max) : '');\nconst errors = [];\nconst o = (b && typeof b === 'object' && !Array.isArray(b)) ? b : {};\nif (o !== b) errors.push('body must be a JSON object');\nconst idOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? String(v) : (typeof v === 'string' ? v.trim() : ''));\nconst order_id = idOf(o.order_id);\nif (!/^[A-Za-z0-9_-]{1,40}$/.test(order_id)) errors.push('order_id is required (1-40 letters, digits, - or _)');\nlet order_number = '';\nif (o.order_number !== undefined && o.order_number !== null && o.order_number !== '') {\n  order_number = idOf(o.order_number);\n  if (!/^[A-Za-z0-9_#-]{1,40}$/.test(order_number)) { errors.push('order_number invalid'); order_number = ''; }\n}\nconst buyer_first_name = clean(o.buyer_first_name, 60);\nif (!buyer_first_name) errors.push('buyer_first_name is required (max 60)');\nconst items = [];\nif (!Array.isArray(o.items) || o.items.length < 1 || o.items.length > 50) errors.push('items must be an array of 1-50');\nelse o.items.forEach((it, i) => {\n  const title = clean(it && it.title, 200);\n  const qty = it && it.qty;\n  const price = it && it.price;\n  if (!title) errors.push('items[' + i + '].title is required');\n  if (!Number.isInteger(qty) || qty < 1 || qty > 999) errors.push('items[' + i + '].qty must be an integer 1-999');\n  if (price !== undefined && price !== null && !(typeof price === 'number' && Number.isFinite(price) && price >= 0 && price <= 100000)) errors.push('items[' + i + '].price must be a number 0-100000');\n  items.push({ title, qty, price: typeof price === 'number' ? price : null });\n});\nconst total = o.total;\nif (!(typeof total === 'number' && Number.isFinite(total) && total >= 0 && total <= 1000000)) errors.push('total must be a number 0-1000000');\nconst currency = typeof o.currency === 'string' ? o.currency.trim().toUpperCase() : '';\nif (!/^[A-Z]{3}$/.test(currency)) errors.push('currency must be a 3-letter code');\nconst day = (v, label, required) => {\n  if (v === undefined || v === null || v === '') { if (required) errors.push(label + ' is required'); return ''; }\n  if (typeof v !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}([T ][\\d:.]+(Z|[+-]\\d{2}:?\\d{2})?)?$/.test(v.trim()) || isNaN(Date.parse(v.trim().slice(0, 10) + 'T00:00:00Z'))) { errors.push(label + ' must be a YYYY-MM-DD date'); return ''; }\n  return v.trim().slice(0, 10);\n};\nconst order_date = day(o.order_date, 'order_date', true);\nconst ship_by = day(o.ship_by, 'ship_by', false);\nlet items_summary = items.map(it => it.qty + ' x ' + it.title).join('; ');\nif (items_summary.length > 1900) items_summary = items_summary.slice(0, 1897) + '...';\nreturn [{ json: { valid: errors.length === 0, errors, order_id, order_number, buyer_first_name, items, items_summary, total, currency, order_date, ship_by } }];\n"
+   },
+   "name": "Validate Order",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c2",
+       "leftValue": "={{ $json.valid }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Order valid?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, errors: $('Validate Order').first().json.errors }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond Bad Order",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1100,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_ETSY_ORDERS_DB_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "simple": false,
+    "filterType": "manual",
+    "matchType": "allFilters",
+    "filters": {
+     "conditions": [
+      {
+       "key": "Order ID|title",
+       "condition": "equals",
+       "titleValue": "={{ $('Validate Order').first().json.order_id }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Notion Find Order",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1100,
+    0
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const v = $('Validate Order').first().json;\nconst text = (x) => !x ? '' : (x.title || x.rich_text || []).map(t => t.plain_text).join('');\nlet exists = false;\nfor (const it of $('Notion Find Order').all()) {\n  const p = it.json && it.json.properties;\n  if (p && text(p['Order ID']) === v.order_id) { exists = true; break; }\n}\nreturn [{ json: { exists, order_id: v.order_id } }];\n"
+   },
+   "name": "Dedupe",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    0
+   ],
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c3",
+       "leftValue": "={{ $json.exists }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Already exists?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true, duplicate: true, order_id: $('Dedupe').first().json.order_id }) }}",
+    "options": {}
+   },
+   "name": "Respond Duplicate",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    -120
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_ETSY_ORDERS_DB_ID",
+     "mode": "id"
+    },
+    "title": "={{ $('Validate Order').first().json.order_id }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Order ID|title",
+       "title": "={{ $('Validate Order').first().json.order_id }}"
+      },
+      {
+       "key": "Order Number|rich_text",
+       "text": "={{ $('Validate Order').first().json.order_number }}"
+      },
+      {
+       "key": "Buyer First Name|rich_text",
+       "text": "={{ $('Validate Order').first().json.buyer_first_name }}"
+      },
+      {
+       "key": "Items Summary|rich_text",
+       "text": "={{ $('Validate Order').first().json.items_summary }}"
+      },
+      {
+       "key": "Total|number",
+       "numberValue": "={{ $('Validate Order').first().json.total }}"
+      },
+      {
+       "key": "Currency|rich_text",
+       "text": "={{ $('Validate Order').first().json.currency }}"
+      },
+      {
+       "key": "Order Date|date",
+       "includeTime": false,
+       "date": "={{ $('Validate Order').first().json.order_date }}"
+      },
+      {
+       "key": "Ship By|date",
+       "includeTime": false,
+       "date": "={{ $('Validate Order').first().json.ship_by || null }}"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "New"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Create Order Row",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1760,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Etsy order: ' + $('Validate Order').first().json.order_id }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Etsy order: ' + $('Validate Order').first().json.order_id }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Etsy"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ JSON.stringify({ event: 'new_order', order_id: $('Validate Order').first().json.order_id, total: $('Validate Order').first().json.total, currency: $('Validate Order').first().json.currency }) }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Order",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1980,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true, duplicate: false, order_id: $('Validate Order').first().json.order_id }) }}",
+    "options": {}
+   },
+   "name": "Respond Order",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    2200,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "jarvis/etsy/shipped",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Etsy Shipped Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    600
+   ],
+   "webhookId": "jarvis-etsy-shipped"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Shared-secret check for non-browser callers (Etsy/Zapier/email forward). Fails closed: no env var set means reject.\nconst j = $input.first().json;\nconst headers = j.headers || {};\nconst got = typeof headers['x-jarvis-secret'] === 'string' ? headers['x-jarvis-secret'] : '';\nlet expected = '';\ntry { expected = String($env.JARVIS_INTAKE_SECRET || ''); } catch (e) { expected = ''; }\nlet ok = expected.length > 0 && got.length === expected.length;\nif (ok) { let d = 0; for (let i = 0; i < got.length; i++) d |= got.charCodeAt(i) ^ expected.charCodeAt(i); ok = d === 0; }\nreturn [{ json: { authorized: ok, body: ok ? (j.body || {}) : {} } }];\n"
+   },
+   "name": "Check Secret B",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c4",
+       "leftValue": "={{ $json.authorized }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Authorized B?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, error: 'unauthorized' }) }}",
+    "options": {
+     "responseCode": 401
+    }
+   },
+   "name": "Respond Unauthorized B",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    780
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const b = $input.first().json.body;\nconst clean = (v, max) => (typeof v === 'string' ? v.replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, max) : '');\nconst errors = [];\nconst o = (b && typeof b === 'object' && !Array.isArray(b)) ? b : {};\nif (o !== b) errors.push('body must be a JSON object');\nconst idOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? String(v) : (typeof v === 'string' ? v.trim() : ''));\nconst order_id = idOf(o.order_id);\nif (!/^[A-Za-z0-9_-]{1,40}$/.test(order_id)) errors.push('order_id is required (1-40 letters, digits, - or _)');\nconst tracking_number = clean(o.tracking_number, 60);\nif (!/^[A-Za-z0-9 -]{4,60}$/.test(tracking_number)) errors.push('tracking_number is required (4-60 letters, digits, space or -)');\nconst carrier = clean(o.carrier, 40);\nif (!/^[A-Za-z0-9 .&-]{2,40}$/.test(carrier)) errors.push('carrier is required (2-40 characters)');\nlet shipped_at = '';\nif (o.shipped_at !== undefined && o.shipped_at !== null && o.shipped_at !== '') {\n  const s = typeof o.shipped_at === 'string' ? o.shipped_at.trim() : '';\n  if (!/^\\d{4}-\\d{2}-\\d{2}([T ][\\d:.]+(Z|[+-]\\d{2}:?\\d{2})?)?$/.test(s) || isNaN(Date.parse(s.slice(0, 10) + 'T00:00:00Z'))) errors.push('shipped_at must be a YYYY-MM-DD date');\n  else shipped_at = s.slice(0, 10);\n}\nif (!shipped_at && errors.length === 0) shipped_at = new Date().toISOString().slice(0, 10);\nreturn [{ json: { valid: errors.length === 0, errors, order_id, tracking_number, carrier, shipped_at } }];\n"
+   },
+   "name": "Validate Shipped",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c5",
+       "leftValue": "={{ $json.valid }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Shipped valid?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    880,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, errors: $('Validate Shipped').first().json.errors }) }}",
+    "options": {
+     "responseCode": 400
+    }
+   },
+   "name": "Respond Bad Shipped",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1100,
+    780
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "REPLACE_WITH_ETSY_ORDERS_DB_ID",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "simple": false,
+    "filterType": "manual",
+    "matchType": "allFilters",
+    "filters": {
+     "conditions": [
+      {
+       "key": "Order ID|title",
+       "condition": "equals",
+       "titleValue": "={{ $('Validate Shipped').first().json.order_id }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Notion Find Order B",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    1100,
+    600
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const v = $('Validate Shipped').first().json;\nconst text = (x) => !x ? '' : (x.title || x.rich_text || []).map(t => t.plain_text).join('');\nlet row = null;\nfor (const it of $('Notion Find Order B').all()) {\n  const p = it.json && it.json.properties;\n  if (!p || text(p['Order ID']) !== v.order_id) continue;\n  row = { found: true, page_id: it.json.id, order_id: v.order_id, order_number: text(p['Order Number']), buyer_first_name: text(p['Buyer First Name']), items_summary: text(p['Items Summary']), status: (p['Status'] && p['Status'].select && p['Status'].select.name) || '', tracking_number: v.tracking_number, carrier: v.carrier, shipped_at: v.shipped_at };\n  break;\n}\nreturn [{ json: row || { found: false, order_id: v.order_id } }];\n"
+   },
+   "name": "Pick Order",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    600
+   ],
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c6",
+       "leftValue": "={{ $json.found }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Order found?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1540,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, error: 'order not found' }) }}",
+    "options": {
+     "responseCode": 404
+    }
+   },
+   "name": "Respond Not Found",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1760,
+    780
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const j = $input.first().json;\nconst status = j.status || '';\nlet allowed = false, reason = '';\nif (status === 'New' || status === 'Packed') allowed = true;\nelse if (status === 'Shipped') reason = 'Order is already Shipped; not shipping it again.';\nelse reason = 'Order status \"' + status + '\" cannot be shipped; it must be New or Packed.';\nreturn [{ json: Object.assign({}, j, { allowed, guard_reason: reason }) }];\n"
+   },
+   "name": "Guard",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "c7",
+       "leftValue": "={{ $json.allowed }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Shippable?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1980,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: false, error: $('Guard').first().json.guard_reason }) }}",
+    "options": {
+     "responseCode": 409
+    }
+   },
+   "name": "Respond Not Shippable",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    2200,
+    780
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": "={{ $('Guard').first().json.page_id }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Status|select",
+       "selectValue": "Shipped"
+      },
+      {
+       "key": "Tracking Number|rich_text",
+       "text": "={{ $('Guard').first().json.tracking_number }}"
+      },
+      {
+       "key": "Carrier|rich_text",
+       "text": "={{ $('Guard').first().json.carrier }}"
+      },
+      {
+       "key": "Shipped At|date",
+       "includeTime": false,
+       "date": "={{ $('Guard').first().json.shipped_at }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Update Order Shipped",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    2200,
+    600
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Uses ONLY data stored on the Etsy Orders row (plus the carrier and tracking number just received).\n// No delivery dates, no addresses, no promises beyond what is in the row.\nconst r = $('Guard').first().json;\nconst first = r.buyer_first_name || 'there';\nconst lines = [];\nlines.push('Hi ' + first + ',');\nlines.push('');\nlines.push('Good news, your order has shipped' + (r.carrier ? ' with ' + r.carrier : '') + '.');\nif (r.items_summary) lines.push('Items: ' + r.items_summary);\nif (r.tracking_number) lines.push('Tracking number: ' + r.tracking_number);\nlines.push('');\nlines.push('Thank you so much for supporting TheLuminousFairy. If anything is not right with your order, just send us a message and we will help.');\nlines.push('');\nlines.push('TheLuminousFairy');\nconst draft = lines.join('\\n');\nconst title = 'Shipping confirmation: ' + (r.order_number || r.order_id);\nreturn [{ json: { title, draft, order_id: r.order_id, page_id: r.page_id } }];\n"
+   },
+   "name": "Build Draft",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2420,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const p = $('Build Draft').first().json;\nconst TITLE = p.title, AGENT = 'Etsy', TYPE = 'Reply', DRAFT = p.draft, RELATED = 'Etsy order ' + p.order_id;\n\n// Notion rich-text items hold at most 2000 chars, so Draft is written as several rich_text items of <=1900 chars.\n// Concatenating the items' plain_text (what QA does) gives back the exact original text. Nothing is truncated.\nconst MAX = 1900;\nconst chunk = (s) => {\n  const out = [];\n  let i = 0;\n  while (i < s.length) {\n    let end = Math.min(i + MAX, s.length);\n    if (end < s.length) { const c = s.charCodeAt(end - 1); if (c >= 0xD800 && c <= 0xDBFF) end -= 1; } // do not split a surrogate pair\n    out.push(s.slice(i, end));\n    i = end;\n  }\n  return out;\n};\nconst rich = (s) => chunk(String(s)).map(c => ({ type: 'text', text: { content: c } }));\nconst body = {\n  parent: { database_id: 'a807f4c25dfe4ce388626726b7d99f6d' },\n  properties: {\n    'Title': { title: [{ type: 'text', text: { content: String(TITLE).slice(0, 150) } }] },\n    'Agent': { select: { name: AGENT } },\n    'Type': { select: { name: TYPE } },\n    'Draft': { rich_text: rich(DRAFT) },\n    'Status': { select: { name: 'Awaiting Approval' } },\n    'QA Result': { select: { name: 'Not checked' } },\n    'Related Job': { rich_text: rich(String(RELATED).slice(0, 1900)) }\n  }\n};\nreturn [{ json: { notionBody: body } }];\n"
+   },
+   "name": "Chunk Draft",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2640,
+    600
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.notion.com/v1/pages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "notionApi",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Notion-Version",
+       "value": "2022-06-28"
+      },
+      {
+       "name": "content-type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.notionBody) }}",
+    "options": {}
+   },
+   "name": "Create Approval",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2860,
+    600
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": "={{ $('Guard').first().json.page_id }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Approval ID|rich_text",
+       "text": "={{ $('Create Approval').first().json.id }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Link Approval ID",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    3080,
+    600
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/qa",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ approval_id: $('Create Approval').first().json.id }) }}",
+    "options": {
+     "timeout": 10000
+    }
+   },
+   "name": "Call QA",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    3300,
+    600
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Etsy shipped: ' + $('Guard').first().json.order_id }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Etsy shipped: ' + $('Guard').first().json.order_id }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Etsy"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ JSON.stringify({ event: 'shipping_confirmation_drafted', order_id: $('Guard').first().json.order_id, approval_id: $('Create Approval').first().json.id || null }) }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "name": "Log Shipped",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    3520,
+    600
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true, approval_id: $('Create Approval').first().json.id || null }) }}",
+    "options": {}
+   },
+   "name": "Respond Shipped",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    3740,
+    600
+   ]
+  }
+ ],
+ "connections": {
+  "Etsy Order Webhook": {
+   "main": [
+    [
+     {
+      "node": "Check Secret A",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Check Secret A": {
+   "main": [
+    [
+     {
+      "node": "Authorized A?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Authorized A?": {
+   "main": [
+    [
+     {
+      "node": "Validate Order",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Unauthorized A",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate Order": {
+   "main": [
+    [
+     {
+      "node": "Order valid?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Order valid?": {
+   "main": [
+    [
+     {
+      "node": "Notion Find Order",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Bad Order",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Find Order": {
+   "main": [
+    [
+     {
+      "node": "Dedupe",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Dedupe": {
+   "main": [
+    [
+     {
+      "node": "Already exists?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Already exists?": {
+   "main": [
+    [
+     {
+      "node": "Respond Duplicate",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Create Order Row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create Order Row": {
+   "main": [
+    [
+     {
+      "node": "Log Order",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Order": {
+   "main": [
+    [
+     {
+      "node": "Respond Order",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Etsy Shipped Webhook": {
+   "main": [
+    [
+     {
+      "node": "Check Secret B",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Check Secret B": {
+   "main": [
+    [
+     {
+      "node": "Authorized B?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Authorized B?": {
+   "main": [
+    [
+     {
+      "node": "Validate Shipped",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Unauthorized B",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Validate Shipped": {
+   "main": [
+    [
+     {
+      "node": "Shipped valid?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shipped valid?": {
+   "main": [
+    [
+     {
+      "node": "Notion Find Order B",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Bad Shipped",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Find Order B": {
+   "main": [
+    [
+     {
+      "node": "Pick Order",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pick Order": {
+   "main": [
+    [
+     {
+      "node": "Order found?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Order found?": {
+   "main": [
+    [
+     {
+      "node": "Guard",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Not Found",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Guard": {
+   "main": [
+    [
+     {
+      "node": "Shippable?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shippable?": {
+   "main": [
+    [
+     {
+      "node": "Update Order Shipped",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Respond Not Shippable",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Update Order Shipped": {
+   "main": [
+    [
+     {
+      "node": "Build Draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build Draft": {
+   "main": [
+    [
+     {
+      "node": "Chunk Draft",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Chunk Draft": {
+   "main": [
+    [
+     {
+      "node": "Create Approval",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create Approval": {
+   "main": [
+    [
+     {
+      "node": "Link Approval ID",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Link Approval ID": {
+   "main": [
+    [
+     {
+      "node": "Call QA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Call QA": {
+   "main": [
+    [
+     {
+      "node": "Log Shipped",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Log Shipped": {
+   "main": [
+    [
+     {
+      "node": "Respond Shipped",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
