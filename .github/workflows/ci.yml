@@ -40,7 +40,8 @@ jobs:
       - name: Dashboard smoke test
         run: |
           npm install --no-save playwright@1.63.0
-          npx playwright install --with-deps chromium
+          # apt mirrors occasionally fail to resolve on runners; retry instead of failing CI
+          for i in 1 2 3; do npx playwright install --with-deps chromium && break; [ "$i" = 3 ] && exit 1; sleep 20; done
           node tests/dashboard/smoke.test.js
 
       - name: Agent definition checks
