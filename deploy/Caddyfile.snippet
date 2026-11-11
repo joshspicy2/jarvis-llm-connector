@@ -1,0 +1,13 @@
+# Add to /etc/caddy/Caddyfile next to the existing ops.hightidewash.net block.
+llm.hightidewash.net {
+	reverse_proxy 127.0.0.1:8787 {
+		# Gemini research with search can take a while
+		transport http {
+			read_timeout 300s
+		}
+	}
+	# Keep the secret path out of Caddy's access logs
+	log {
+		output discard
+	}
+}

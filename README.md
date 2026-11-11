@@ -81,3 +81,7 @@ Details, handoffs and human gates: `docs/AGENT-WORKFLOW.md` (draft; several role
 - `docs/CI.md` : the CI workflow.
 - `docs/design/router-and-estimator.md` : Router and Estimator design.
 - `docs/reviews/pr2-qa-review.md` : QA review of PR #2.
+
+## LLM connector (Gemini MCP server)
+
+The Python MCP server that gives Claude Gemini tools (`server.py`, `deploy/`, `tests/test_*.py`) lives in this repo too. See [CONNECTOR.md](CONNECTOR.md) for setup and [docs/FREELLMAPI.md](docs/FREELLMAPI.md) for the optional free-provider tool.
