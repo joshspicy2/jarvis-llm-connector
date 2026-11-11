@@ -157,30 +157,31 @@ describe('Draft', () => {
   });
 });
 
-describe('Secret check', () => {
-  const chk = (headers, env) => run(code('Check Secret A'), { input: [{ headers, body: { a: 1 } }], env })[0].json;
-  test('accepts matching header', () => {
-    const r = chk({ 'x-jarvis-secret': 'abc' }, { JARVIS_INTAKE_SECRET: 'abc' });
-    assert.equal(r.authorized, true);
-    assert.deepEqual(r.body, { a: 1 });
-  });
-  test('rejects missing, wrong, different length', () => {
-    for (const h of [{}, { 'x-jarvis-secret': 'abd' }, { 'x-jarvis-secret': 'abcd' }, { 'x-jarvis-secret': '' }, { 'x-jarvis-secret': ['abc'] }])
-      assert.equal(chk(h, { JARVIS_INTAKE_SECRET: 'abc' }).authorized, false);
-  });
-  test('fails closed when the env var is unset or empty', () => {
-    assert.equal(chk({ 'x-jarvis-secret': '' }, {}).authorized, false);
-    assert.equal(chk({ 'x-jarvis-secret': '' }, { JARVIS_INTAKE_SECRET: '' }).authorized, false);
-  });
-  test('both entry points share the check, route to 401, and the env value is not in the repo', () => {
-    assert.equal(code('Check Secret A'), code('Check Secret B'));
-    assert.match(code('Check Secret A'), /\$env\.JARVIS_INTAKE_SECRET/);
-    for (const [a, r] of [['Authorized A?', 'Respond Unauthorized A'], ['Authorized B?', 'Respond Unauthorized B']]) {
-      assert.equal(wf.connections[a].main[1][0].node, r);
-      assert.equal(node(r).parameters.options.responseCode, 401);
+describe('Webhook auth (n8n Header Auth)', () => {
+  const hooks = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.webhook');
+  test('both webhooks use headerAuth with an empty httpHeaderAuth credential placeholder', () => {
+    assert.equal(hooks.length, 2);
+    for (const h of hooks) {
+      assert.equal(h.parameters.authentication, 'headerAuth');
+      assert.deepEqual(Object.keys(h.credentials), ['httpHeaderAuth']);
+      assert.equal(h.credentials.httpHeaderAuth.id, '');
     }
-    for (const [hook, next] of [['Etsy Order Webhook', 'Check Secret A'], ['Etsy Shipped Webhook', 'Check Secret B']])
-      assert.equal(wf.connections[hook].main[0][0].node, next);
+  });
+  test('webhooks feed validation directly (no custom secret check node left)', () => {
+    assert.equal(wf.connections['Etsy Order Webhook'].main[0][0].node, 'Validate Order');
+    assert.equal(wf.connections['Etsy Shipped Webhook'].main[0][0].node, 'Validate Shipped');
+    assert.ok(!wf.nodes.some((n) => /Check Secret|Authorized|Unauthorized/.test(n.name)));
+  });
+  test('no Code node references $env, and no secret env name or value is in the workflow', () => {
+    for (const n of wf.nodes.filter((x) => x.type === 'n8n-nodes-base.code')) assert.doesNotMatch(n.parameters.jsCode, /\$env/);
+    assert.doesNotMatch(JSON.stringify(wf), /JARVIS_INTAKE_SECRET|x-jarvis-secret/i);
+  });
+  test('every connection target exists', () => {
+    const names = new Set(wf.nodes.map((n) => n.name));
+    for (const [from, c] of Object.entries(wf.connections)) {
+      assert.ok(names.has(from));
+      for (const out of c.main) for (const t of out) assert.ok(names.has(t.node), t.node);
+    }
   });
 });
 
