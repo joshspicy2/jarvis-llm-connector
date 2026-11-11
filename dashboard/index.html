@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis — High Tide Ops</title>
+<style>
+:root{--bg:#02080c;--panel:#04141b;--line:#0b4a5a;--text:#bff3ff;--mute:#4d8a99;--accent:#00d4ff;--amber:#ffb340;--ok:#00e5a0;--warn:#ffb340;--bad:#ff4d4d;
+ --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
+body.war{--bg:#0a0204;--panel:#160509;--line:#5a0b1a;--text:#ffd0d0;--mute:#995060;--accent:#ff3b3b}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;min-width:1200px;min-height:700px}
+body{background:var(--bg);color:var(--text);font:13px/1.45 var(--mono);transition:background .6s}
+#sea{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.35}
+.app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 24px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 85%,transparent)}
+h1{margin:0;font-size:16px;letter-spacing:.3em;color:var(--accent)}
+h1 small{display:block;font-size:10px;letter-spacing:.15em;color:var(--mute);font-weight:400;text-transform:uppercase}
+.stat{text-align:center;font-size:10px;letter-spacing:.15em;color:var(--mute);text-transform:uppercase}
+.stat b{display:block;font-size:13px;color:var(--accent);letter-spacing:.1em}
+.hdr-mid{display:flex;gap:32px}
+.badge{padding:3px 10px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
+.badge.live{color:var(--ok);border-color:var(--ok)}.badge.sample{color:var(--warn);border-color:var(--warn)}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,26vw) 1fr minmax(300px,26vw);gap:24px;padding:24px 24px 96px}
+.col{display:flex;flex-direction:column;gap:20px;min-width:0;min-height:0}
+.col>.panel{flex:0 0 auto}.col>.panel.grow{flex:1 1 0;min-height:0;overflow:auto}
+.panel{position:relative;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 85%,transparent);padding:14px}
+.panel::before,.panel::after{content:"";position:absolute;width:10px;height:10px;border:2px solid var(--accent)}
+.panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+.panel h2{margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.25em;font-weight:400;color:var(--text);display:flex;justify-content:space-between;align-items:center}
+.panel h2 i{font-style:normal;color:var(--mute);letter-spacing:.1em;font-size:10px}
+.tag-sample,.samp-tag{font-size:9px;color:var(--warn);border:1px dashed var(--warn);padding:1px 5px;letter-spacing:.1em}
+.col>.panel.rules{max-height:24vh;overflow:auto}
+.apr{border:1px solid var(--line);padding:5px 8px;margin-top:5px;font-size:11px}
+.apr b{display:block;font-weight:500;overflow-wrap:anywhere}.apr .meta{color:var(--mute);font-size:10px;display:flex;justify-content:space-between;gap:6px}
+.apr p{margin:3px 0 0;color:var(--mute);font-size:10px;overflow-wrap:anywhere}
+.chip{font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:0 5px;border:1px solid var(--mute);color:var(--mute);white-space:nowrap}
+.chip.pass{color:var(--ok);border-color:var(--ok)}.chip.fail{color:var(--bad);border-color:var(--bad)}
+.cnt{color:var(--accent)}
+.stage{margin-bottom:10px}.stage h3{margin:0 0 4px;font-size:11px;font-weight:400;letter-spacing:.1em;color:var(--mute);display:flex;justify-content:space-between;text-transform:uppercase}
+.bar{height:3px;background:var(--line);margin-bottom:4px}.bar>div{height:100%;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.card{border:1px solid var(--line);padding:4px 8px;margin-top:4px;font-size:11px}.card b{display:block;color:var(--text);font-weight:500}.card span{color:var(--mute)}
+table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:400;letter-spacing:.1em;text-transform:uppercase;font-size:10px}
+.empty{color:var(--mute);padding:12px;text-align:center;border:1px dashed var(--line);font-size:11px}
+.agent{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.agent:last-child{border:0}.agent b{letter-spacing:.1em;text-transform:uppercase;font-size:12px}.agent p{margin:0;color:var(--mute);font-size:10px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--mute)}
+.active .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}.waiting .dot{background:var(--amber)}.error .dot{background:var(--bad)}
+.st{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
+.log{font-size:11px;overflow:auto;min-height:0}
+@media(max-height:820px){.agent p{display:none}.agent{padding:3px 0}.panel{padding:10px}.col{gap:12px}.main{gap:16px;padding-top:16px}}
+.col>.panel.shrink{flex:0 1 auto;min-height:0;overflow:auto}.log div{padding:2px 0}.log em{font-style:normal;color:var(--mute);margin-right:6px}
+.war-btn{width:100%;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:none;border:1px solid var(--line);color:var(--text);font:inherit;letter-spacing:.2em;padding:10px;text-transform:uppercase}
+.war-btn:focus-visible,#chatform button:focus-visible,#chatin:focus-visible,.apr:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.war-btn.on{border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px var(--accent) inset}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#reactor{height:min(62vh,100%);max-width:100%;aspect-ratio:1;overflow:visible}
+.ring{fill:none;stroke:var(--accent);stroke-opacity:.5}
+.spin{transform-origin:200px 200px;animation:spin 24s linear infinite}.spin2{animation-duration:40s;animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.node text{font:9px var(--mono);fill:var(--text);letter-spacing:.1em;text-anchor:middle}
+.node circle{fill:var(--bg);stroke:var(--mute);stroke-width:1.5}
+.node.active circle{stroke:var(--ok);fill:color-mix(in srgb,var(--ok) 30%,var(--bg))}.node.waiting circle{stroke:var(--amber)}.node.error circle{stroke:var(--bad)}
+#core1{font:bold 13px var(--mono);fill:var(--accent);text-anchor:middle;letter-spacing:.1em}
+.wave{display:flex;gap:3px;align-items:center;height:30px}.wave i{width:3px;background:var(--accent);animation:w 1.1s ease-in-out infinite}
+@keyframes w{50%{height:100%}}
+.chatbar{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:12px 16px}
+.chatlog{max-width:640px;margin:0 auto 6px;max-height:110px;overflow:auto;font-size:11px;background:color-mix(in srgb,var(--bg) 80%,transparent)}
+.chatlog .me{color:var(--accent)}.chatlog .jv{color:var(--amber)}
+.chatbar form{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:5px 6px;background:var(--panel)}
+.orb{width:28px;height:28px;border-radius:50%;flex:none;background:radial-gradient(circle at 35% 30%,#ffe2a8,var(--amber) 55%,#a35a00);box-shadow:0 0 12px var(--amber);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 24px var(--amber)}}
+.chatbar input{flex:1;background:none;border:0;color:var(--text);font:inherit;font-size:13px;letter-spacing:.1em;outline:none;min-width:0;text-transform:uppercase}
+.chatbar input::placeholder{color:var(--mute)}
+.chatbar button{background:none;border:1px solid var(--accent);color:var(--accent);border-radius:99px;padding:6px 14px;font:inherit;letter-spacing:.15em;cursor:pointer}
+.hdr-r{display:flex;gap:10px;align-items:center}
+.btn,.seg button{background:none;border:1px solid var(--line);color:var(--text);font:inherit;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;cursor:pointer}
+.btn:disabled,.seg button:disabled{opacity:.45;cursor:not-allowed}
+.btn.go{border-color:var(--ok);color:var(--ok)}.btn.no{border-color:var(--bad);color:var(--bad)}
+.btn[aria-pressed="true"],.seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.btn:focus-visible,.seg button:focus-visible,.mv select:focus-visible,#decidedBy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:flex;gap:4px;margin-bottom:8px}
+.aprby{display:flex;gap:6px;align-items:center;font-size:10px;color:var(--mute);margin-bottom:4px}
+#decidedBy,.mv select{background:var(--bg);border:1px solid var(--line);color:var(--text);font:inherit;font-size:11px;padding:3px 6px;min-width:0}
+#decidedBy{flex:1}
+.apract{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:10px}
+.aprnote{color:var(--warn);font-size:10px;margin-top:4px}.aprerr{color:var(--bad);font-size:10px;margin-top:4px}
+.msg{font-size:10px;color:var(--mute);min-height:14px;margin-bottom:4px}
+.board{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:4px}
+.bcol{flex:1 1 130px;min-width:0;border:1px dashed var(--line);padding:6px;min-height:80px}
+.bcol.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bcol h3{margin:0 0 4px;font-size:10px;font-weight:400;letter-spacing:.1em;color:var(--mute);display:flex;justify-content:space-between;text-transform:uppercase}
+.bcard{border:1px solid var(--line);padding:4px 6px;margin-top:4px;font-size:11px;background:var(--panel)}
+.bcard[draggable="true"]{cursor:grab}.bcard.busy{opacity:.5}
+.bcard b{display:block;font-weight:500;overflow-wrap:anywhere}.bcard>span{color:var(--mute)}
+.mv{display:block;margin-top:3px;font-size:10px;color:var(--mute)}.mv select{width:100%;margin-top:2px}
+.reportview{flex:1;min-height:0;overflow:auto;padding:24px 24px 96px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-content:start}
+.reportview[hidden],.main[hidden]{display:none}
+.reportview .wide{grid-column:1/-1}
+.rbar{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px}
+.rbar .lbl{flex:0 0 110px;overflow-wrap:anywhere}.rbar .trk{flex:1;height:8px;background:var(--line);display:flex;min-width:0}
+.rbar .trk i{display:block;height:100%;background:var(--accent)}.rbar .trk i.e{background:var(--bad)}.rbar .num{flex:0 0 auto;color:var(--mute);min-width:60px;text-align:right}
+.kpis{display:flex;gap:16px;flex-wrap:wrap}.kpis div{font-size:10px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase}.kpis b{display:block;font-size:18px;color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.tile{border:1px solid var(--line);padding:8px 10px;font-size:10px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase;min-width:0}
+.tile b{display:block;font-size:18px;color:var(--accent);letter-spacing:0;overflow-wrap:anywhere}
+.sstrip{display:flex;gap:8px;flex-wrap:wrap}
+.sst{border:1px solid var(--line);padding:5px 10px;font-size:11px;display:flex;gap:8px;align-items:center}
+.sst b{color:var(--accent);font-size:14px}.sst.bad{border-color:var(--bad);border-left-width:4px}.sst.bad b{color:var(--bad)}
+.pill{display:inline-block;font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:0 6px;border:1px solid var(--mute);color:var(--mute);white-space:nowrap}
+.pill.bad{border-color:var(--bad);color:var(--bad);font-weight:700}
+.ship{list-style:none;margin:0;padding:0}
+.ship li{border:1px solid var(--line);border-left:4px solid var(--line);padding:5px 8px;margin-top:5px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;font-size:11px}
+.ship li.over{border-left-color:var(--bad);border-left-style:double;border-color:var(--bad)}
+.ship li div{min-width:0;overflow-wrap:anywhere}.ship li span.m{display:block;color:var(--mute);font-size:10px}
+.tscroll{overflow-x:auto}
+.etsycnt b small{font-size:9px;color:var(--warn);font-weight:400}
+@media (max-width:900px){
+ html,body{height:auto;min-width:0;min-height:0;overflow:visible}
+ .app{height:auto;min-height:100vh}
+ header{flex-wrap:wrap;padding:10px 16px}
+ .hdr-mid{gap:16px}
+ .main{display:flex;flex-direction:column;gap:16px;padding:16px 16px 190px;flex:none;min-height:0}
+ .col{display:contents}.col.center{display:flex;order:5;gap:12px}
+ .col>.panel,.col>.panel.grow,.col>.panel.shrink,.col>.panel.rules{flex:none;max-height:none;overflow:visible;min-height:0}
+ .p-war{order:1}.p-approvals{order:2}.p-pipeline{order:3}.p-agents{order:4}.p-rules{order:6}.p-log{order:7}
+ #reactor{height:auto;width:min(100%,360px)}
+ #approvals,#pipeline,#rules{overflow-x:auto}
+ .log{max-height:40vh}
+ .board{flex-direction:column;overflow-x:visible}.bcol{flex:none}
+ .btn,.seg button,.war-btn,.chatbar button,#decidedBy,.mv select{min-height:40px;font-size:12px}
+ .btn,.seg button{padding:6px 12px}
+ .chatbar input{min-height:40px;font-size:16px}
+ .chatbar{padding:8px 12px}
+ .apr,.bcard{font-size:12px}
+ .reportview{display:block;padding:16px 16px 190px}.reportview>.panel{margin-bottom:16px}
+ .rbar .lbl{flex-basis:80px}
+ .hdr-r{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+<canvas id="sea"></canvas>
+<div class="app">
+  <header>
+    <h1>JARVIS<small>High Tide Ops · just a rather very intelligent system</small></h1>
+    <div class="hdr-mid">
+      <div class="stat">System status<b id="sysstat">OPTIMAL</b></div>
+      <div class="stat">Local time<b id="clock">--:--:--</b></div>
+    </div>
+    <div class="hdr-r"><span class="stat etsycnt" id="etsyStat" title="Etsy orders to ship">Etsy to ship<b id="etsyCnt">-</b></span><button class="btn" id="salesBtn" type="button" aria-pressed="false">Sales</button><button class="btn" id="reportBtn" type="button" aria-pressed="false">Report</button><span id="conn" class="badge sample" role="status" aria-live="polite">sample data</span></div>
+  </header>
+  <div class="main">
+    <div class="col">
+      <section class="panel grow p-pipeline"><h2>PIPELINE <i>JOBS <span class="tag-sample" data-for="pipeline" hidden>SAMPLE</span></i></h2>
+        <div class="seg" role="group" aria-label="Jobs view"><button type="button" id="viewList" aria-pressed="true">Pipeline list</button><button type="button" id="viewBoard" aria-pressed="false">Board</button></div>
+        <div class="msg" id="boardMsg" role="status" aria-live="polite"></div><div id="pipeline"></div></section>
+      <section class="panel rules p-rules"><h2>ESTIMATE RULES <i><span class="tag-sample" data-for="rules" hidden>SAMPLE</span></i></h2><div id="rules"></div></section>
+      <section class="panel grow p-approvals"><h2>APPROVALS <i><span class="cnt" id="aprCount">0</span> <span class="samp-tag" id="aprSample" hidden>SAMPLE</span></i></h2>
+        <label class="aprby">Decided by <input id="decidedBy" maxlength="60" autocomplete="name" placeholder="your name"></label>
+        <div class="msg" id="aprMsg" role="status" aria-live="polite"></div><div id="approvals" role="region" aria-label="Approvals" tabindex="0"></div></section>
+    </div>
+    <div class="col center">
+      <svg id="reactor" viewBox="-40 -10 480 420" role="img" aria-label="Agent reactor">
+        <g class="spin"><circle class="ring" cx="200" cy="200" r="190" stroke-dasharray="4 6"/></g>
+        <circle class="ring" cx="200" cy="200" r="150"/>
+        <g class="spin spin2"><circle class="ring" cx="200" cy="200" r="105" stroke-dasharray="30 8"/></g>
+        <circle cx="200" cy="200" r="56" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        <text id="core1" x="200" y="196">CORE</text><text id="core2" class="core" x="200" y="212" style="font:bold 11px var(--mono);fill:var(--accent);text-anchor:middle;letter-spacing:.1em">ACTIVE</text>
+        <g id="nodes"></g>
+      </svg>
+      <div class="wave" id="wave"></div>
+    </div>
+    <div class="col">
+      <section class="panel shrink p-agents"><h2>AGENTS <i><span class="tag-sample" data-for="agents" hidden>SAMPLE</span></i></h2><div id="agents"></div></section>
+      <section class="panel p-war"><h2>DEFENSE SYSTEMS <i>WAR MODE</i></h2>
+        <button class="war-btn" id="war" type="button"><span id="warLabel">War Mode: off</span><span aria-hidden="true">⏻</span></button>
+        <div style="color:var(--mute);font-size:10px;margin-top:6px">Stored in Notion System Flags via n8n.</div></section>
+      <section class="panel grow p-log"><h2>ACTIVITY LOG <i>RT-LOG <span class="tag-sample" data-for="log" hidden>SAMPLE</span></i></h2><div class="log" id="log" role="log" aria-live="polite" aria-label="Activity log" tabindex="0"></div></section>
+    </div>
+  </div>
+  <main class="reportview" id="reportView" hidden aria-label="Weekly report"></main>
+  <main class="reportview" id="salesView" hidden aria-label="Etsy sales, TheLuminousFairy"></main>
+</div>
+<div class="chatbar">
+  <div class="chatlog" id="chatlog" role="log" aria-live="polite" aria-label="Chat messages"></div>
+  <form id="chatform"><div class="orb" aria-hidden="true"></div><input id="chatin" aria-label="Command for Jarvis" placeholder="Awaiting command…" autocomplete="off"><button type="submit" aria-label="Send message">SEND</button></form>
+</div>
+
+<script src="config.js"></script>
+<script>
+const C = window.JARVIS_CONFIG;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---- SAMPLE DATA (fallback only; clearly tagged in the UI) ----
+const SAMPLE = {
+  pipeline: { stages: [
+    { name:"Booked", cards:[{title:"Sample: Dana R.", sub:"Interior Cleaning · 2026-11-03"}] },
+    { name:"In Progress", cards:[{title:"Sample: Lee Family", sub:"Interior Cleaning"}] },
+    { name:"Awaiting Invoice", cards:[{title:"Sample: M. Ortiz", sub:"Interior Cleaning"}] },
+    { name:"Flagged", cards:[] },
+    { name:"Paid", cards:[] } ] },
+  agents: [
+    {name:"Conductor",status:"active",detail:"Sequencing handoffs (sample)"},
+    {name:"Router",status:"active",detail:"Classifying inbound (sample)"},
+    {name:"Estimator",status:"waiting",detail:"Needs pricing inputs (sample)"},
+    {name:"QA",status:"idle",detail:"—"},
+    {name:"Marketer",status:"idle",detail:"Phase 2"},
+    {name:"Shield/Ops",status:"active",detail:"Watching flags & budget (sample)"} ],
+  rules: [],  // intentionally empty: real rows live in Notion Estimate Rules DB
+  warMode: { enabled:false },
+  log: [ {t:"--:--:--", text:"Sample entry: Router classified inbound lead"}, {t:"--:--:--", text:"Sample entry: Estimate draft awaiting approval"} ],
+};
+SAMPLE.approvals = [
+  {id:"s1",title:"Sample: Estimate for Dana R.",agent:"Estimator",type:"Estimate",qa:"Pass",related_job:"Sample job",created:"",preview:"Sample draft text, not real data."},
+  {id:"s2",title:"Sample: Reply to inbound lead",agent:"Support",type:"Reply",qa:"Not checked",related_job:"",created:"",preview:"Sample draft reply awaiting review."} ];
+SAMPLE.weeklyReport = { week_start:"2026-01-05", week_end:"2026-01-11", generated_at:"",
+  runs_by_agent:{ Conductor:{runs:42,errors:1}, Router:{runs:30,errors:0}, Estimator:{runs:12,errors:2}, QA:{runs:9,errors:0} },
+  approvals:{created:12,approved:7,rejected:2,sent:6,awaiting:3},
+  qa:{pass:8,fail:1,not_checked:3},
+  jobs:{by_status:{"Booked":4,"In Progress":2,"Awaiting Invoice":3,"Paid":5,"Flagged":1},flagged:1} };
+SAMPLE.etsySales = { generated_at:"", currency:"USD",
+  totals:{ orders_7d:9, revenue_7d:312.5, orders_30d:34, revenue_30d:1184.75, avg_order_30d:34.85 },
+  by_status:{ New:3, Packed:2, Shipped:6, Delivered:21, Issue:1 },
+  to_ship:[ {order:"SAMPLE-1001",buyer_first_name:"Sample Ana",items:"Sample: 2 x Luminous Candle",ship_by:"2026-10-30",overdue:true},
+            {order:"SAMPLE-1002",buyer_first_name:"Sample Ben",items:"Sample: 1 x Fairy Light Set",ship_by:"2026-11-03",overdue:false},
+            {order:"SAMPLE-1003",buyer_first_name:"Sample Cy",items:"Sample: 3 x Glow Charm",ship_by:"2026-11-04",overdue:false} ],
+  recent:[ {order:"SAMPLE-1003",date:"2026-10-31",total:48.2,status:"New"}, {order:"SAMPLE-1002",date:"2026-10-30",total:27,status:"Packed"},
+           {order:"SAMPLE-0999",date:"2026-10-28",total:64.5,status:"Shipped"}, {order:"SAMPLE-0990",date:"2026-10-25",total:19.99,status:"Delivered"} ],
+  issues:1 };
+const BOARD_COLS = ["Booked","In Progress","Awaiting Invoice","Paid","Flagged"];
+const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
+const AGENT_ORDER = ["Conductor","Router","Estimator","Marketer","Builder","Support","QA","Engineer","Researcher","Developer","Shield/Ops"];
+const state = { live:{}, war:false, pending:false, warKnown:false, warSeq:0,
+  pipe:{stages:[]}, pipeSample:true, view:(store.get("jarvis.view")==="board"?"board":"list"), moving:new Set(), boardFocus:null, lastPipe:null,
+  apr:{rows:[], sample:true, confirm:null, pending:null, err:{}, last:null, focus:null} };
+
+async function call(key, body, timeoutMs){
+  const ep = C.ENDPOINTS[key];
+  if (C.FORCE_SAMPLE) throw new Error("sample forced");
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), timeoutMs || C.TIMEOUT_MS);
+  try{
+    const r = await fetch(C.N8N_BASE + ep.path, {
+      method: ep.method, signal: ctl.signal,
+      headers: body ? {"Content-Type":"application/json"} : undefined,
+      body: body ? JSON.stringify(body) : undefined });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+async function load(key, sample){
+  try { const d = await call(key); state.live[key]=true; return d; }
+  catch(e){ state.live[key]=false; return sample; }
+}
+function markSample(){
+  document.querySelectorAll(".tag-sample").forEach(el=> el.hidden = !!state.live[el.dataset.for]);
+  const any = Object.values(state.live).some(Boolean), all = Object.values(state.live).every(Boolean);
+  const c = $("conn"); c.className = "badge " + (all ? "live":"sample");
+  c.textContent = all ? "live · n8n" : any ? "partial · some sample data" : "sample data (n8n unreachable)";
+}
+
+function renderPipeline(d, isSample){
+  if(state.moving.size) return;           // do not clobber an in-flight move
+  state.pipe = (d && Array.isArray(d.stages)) ? d : {stages:[]}; state.pipeSample = !!isSample; drawPipeline();
+}
+function drawPipeline(){
+  const board = state.view==="board";
+  $("viewList").setAttribute("aria-pressed", String(!board)); $("viewBoard").setAttribute("aria-pressed", String(board));
+  const html = board ? boardHtml() : listHtml();
+  if(html===state.lastPipe) return; state.lastPipe = html; $("pipeline").innerHTML = html;
+  if(state.boardFocus){ const el=document.querySelector('#pipeline select[data-id="'+CSS.escape(state.boardFocus)+'"]'); if(el) el.focus(); state.boardFocus=null; }
+}
+function listHtml(){
+  const st=state.pipe.stages, max=Math.max(1,...st.map(s=>(s.cards||[]).length));
+  return st.map(s=>{const n=(s.cards||[]).length;return `<div class="stage"><h3>${esc(s.name)}<span>${n}</span></h3><div class="bar"><div style="width:${n/max*100}%"></div></div>${
+    (s.cards||[]).map(c=>`<div class="card"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span></div>`).join("")}</div>`}).join("");
+}
+// Board relies on each pipeline card carrying the Notion page id as `id` (GET /jarvis/pipeline).
+function boardHtml(){
+  const st=state.pipe.stages, by={}; st.forEach(s=>{ by[s.name]=s.cards||[]; });
+  const cols = BOARD_COLS.concat(st.map(s=>s.name).filter(n=>!BOARD_COLS.includes(n) && (by[n]||[]).length));
+  const note = state.pipeSample ? `<div class="aprnote">sample data: cannot move jobs</div>` : "";
+  return note + `<div class="board">` + cols.map(n=>{
+    const cards=by[n]||[];
+    return `<div class="bcol" data-stage="${esc(n)}" role="group" aria-label="${esc(n)}, ${cards.length} jobs"><h3>${esc(n)}<span>${cards.length}</span></h3>${
+      cards.map(c=>{
+        const id=c.id?String(c.id):"", can=!state.pipeSample && id && !state.moving.has(id);
+        return `<div class="bcard${state.moving.has(id)?" busy":""}" data-id="${esc(id)}" ${can?'draggable="true"':""}><b>${esc(c.title)}</b><span>${esc(c.sub)}</span>`+
+          (!state.pipeSample && !id ? `<div class="aprnote">no job id from n8n: cannot move</div>` : "") +
+          `<label class="mv">Move<select data-id="${esc(id)}" aria-label="Move ${esc(c.title)} to"${can?"":" disabled"}>${
+            BOARD_COLS.map(o=>`<option${o===n?" selected":""}>${esc(o)}</option>`).join("")}${BOARD_COLS.includes(n)?"":`<option selected>${esc(n)}</option>`}</select></label></div>`;
+      }).join("")}</div>`; }).join("") + `</div>`;
+}
+function findJob(id){
+  for(const s of state.pipe.stages){ const i=(s.cards||[]).findIndex(c=>String(c.id)===id); if(i>=0) return {stage:s, i, card:s.cards[i]}; }
+  return null;
+}
+async function moveJob(id, to){
+  const loc = findJob(id); if(!loc || state.pipeSample || state.moving.has(id) || loc.stage.name===to) return;
+  const from = loc.stage, idx = loc.i, card = loc.card, title = card.title;
+  let dest = state.pipe.stages.find(s=>s.name===to); if(!dest){ dest={name:to,cards:[]}; state.pipe.stages.push(dest); }
+  from.cards.splice(idx,1); dest.cards.push(card); state.moving.add(id); $("boardMsg").textContent = "Moving "+title+"…"; drawPipeline();
+  try{
+    const r = await call("moveJob", {id, status:to});
+    if(!r || r.ok!==true) throw new Error("not confirmed");
+    $("boardMsg").textContent = "Moved "+title+" to "+to+".";
+  }catch(e){
+    const k = dest.cards.indexOf(card); if(k>=0) dest.cards.splice(k,1); from.cards.splice(Math.min(idx,from.cards.length),0,card);
+    $("boardMsg").textContent = "Could not move "+title+" to "+to+" ("+(e.message||"error")+"). Reverted; check Notion before retrying.";
+  }finally{ state.moving.delete(id); state.boardFocus=id; drawPipeline(); }
+}
+function setView(v){ state.view=v; store.set("jarvis.view",v); drawPipeline(); }
+$("viewList").addEventListener("click",()=>setView("list")); $("viewBoard").addEventListener("click",()=>setView("board"));
+$("pipeline").addEventListener("change", e=>{ const t=e.target; if(t.matches("select.mv, .mv select")) moveJob(t.dataset.id, t.value); });
+$("pipeline").addEventListener("dragstart", e=>{ const c=e.target.closest&&e.target.closest(".bcard[draggable]"); if(!c){ return; } e.dataTransfer.setData("text/plain", c.dataset.id); e.dataTransfer.effectAllowed="move"; });
+$("pipeline").addEventListener("dragover", e=>{ const c=e.target.closest&&e.target.closest(".bcol"); if(c){ e.preventDefault(); e.dataTransfer.dropEffect="move"; c.classList.add("over"); } });
+$("pipeline").addEventListener("dragleave", e=>{ const c=e.target.closest&&e.target.closest(".bcol"); if(c) c.classList.remove("over"); });
+$("pipeline").addEventListener("drop", e=>{ const c=e.target.closest&&e.target.closest(".bcol"); if(!c) return; e.preventDefault(); c.classList.remove("over");
+  const id=e.dataTransfer.getData("text/plain"); if(id) moveJob(id, c.dataset.stage); });
+function renderAgents(list){
+  const by = Object.fromEntries((list||[]).map(a=>[a.name,a]));
+  const rows = AGENT_ORDER.map(n=>({n, a: by[n]||{status:"idle",detail:"no data"}}));
+  $("agents").innerHTML = rows.map(({n,a})=>`<div class="agent ${esc(a.status)}"><div><b><span class="dot"></span>${n}</b><p>${esc(a.detail)}</p></div><span class="st">${esc(a.status)}</span></div>`).join("");
+  const N = rows.length;
+  $("nodes").innerHTML = rows.map(({n,a},i)=>{const ang=(i/N)*Math.PI*2-Math.PI/2,c=Math.cos(ang),s=Math.sin(ang),x=200+150*c,y=200+150*s,lx=200+188*c,ly=200+188*s+3;
+    return `<g class="node ${esc(a.status)}"><circle cx="${x}" cy="${y}" r="13"/><text x="${x}" y="${y+3}" style="font-size:8px">${esc(n.slice(0,3).toUpperCase())}</text><text x="${lx}" y="${ly}" style="fill:var(--mute);font-size:8px;text-anchor:${c>0.3?"start":c<-0.3?"end":"middle"}">${esc(n.toUpperCase())}</text></g>`}).join("");
+}
+let lastLog = null;
+function renderLog(rows){ const h=(Array.isArray(rows)?rows:[]).map(r=>`<div><em>[${esc(r.t)}]</em>${esc(r.text)}</div>`).join(""); if(h===lastLog) return; lastLog=h; $("log").innerHTML=h; $("log").scrollTop=1e9; }
+function renderRules(rows){
+  if(!Array.isArray(rows)) rows=[];
+  if( !rows.length){
+    $("rules").innerHTML = `<div class="empty">No estimate rules yet. Add rows in the Notion Estimate Rules database and they will appear here.</div>`; return; }
+  $("rules").innerHTML = `<table><thead><tr><th>Service</th><th>Category</th><th>Base</th><th>Unit</th><th>Min</th><th>Notes</th></tr></thead><tbody>${
+    rows.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.category)}</td><td>${r.base!==""?"$"+esc(r.base):""}</td><td>${esc(r.unit)}</td><td>${r.min!==""?"$"+esc(r.min):""}</td><td>${esc(r.notes)}</td></tr>`).join("")}</tbody></table>`;
+}
+function renderApprovals(rows, isSample){
+  const A = state.apr; A.rows = Array.isArray(rows) ? rows : []; A.sample = !!isSample; drawApprovals();
+}
+function drawApprovals(){
+  const A = state.apr, rows = A.rows, by = $("decidedBy").value.trim();
+  $("aprCount").textContent = rows.length; $("aprSample").hidden = !A.sample;
+  const html = !rows.length ? `<div class="empty">Nothing waiting</div>` : rows.map(r=>{
+    const id = String(r.id ?? ""), q = String(r.qa||"Not checked"), cls = q==="Pass"?"pass":q==="Fail"?"fail":"";
+    const busy = A.pending!==null, off = A.sample || busy || !id ? " disabled" : "";
+    let act;
+    if(A.confirm && A.confirm.id===id && !A.sample){
+      const d = A.confirm.decision;
+      act = `<div class="apract" role="group" aria-label="Confirm ${d}"><span>${d==="approve"?"Approve":"Reject"} this item${by?" as "+esc(by):""}?</span><button type="button" class="btn ${d==="approve"?"go":"no"}" data-act="confirm" data-id="${esc(id)}">Yes, ${d}</button><button type="button" class="btn" data-act="cancel" data-id="${esc(id)}">Cancel</button></div>`;
+    } else {
+      act = `<div class="apract"><button type="button" class="btn go" data-act="ask" data-d="approve" data-id="${esc(id)}"${off}>Approve</button><button type="button" class="btn no" data-act="ask" data-d="reject" data-id="${esc(id)}"${off}>Reject</button>${A.pending===id?"<span>Saving…</span>":""}</div>`;
+    }
+    if(A.sample) act += `<div class="aprnote">sample data: cannot decide</div>`;
+    if(A.err[id]) act += `<div class="aprerr" role="alert">${esc(A.err[id])}</div>`;
+    return `<div class="apr" tabindex="0" role="group" aria-label="${esc(r.title)}"><b>${esc(r.title)}</b><div class="meta"><span>${esc(r.agent)} · ${esc(r.type)}${r.related_job?" · "+esc(r.related_job):""}</span><span class="chip ${cls}">QA ${esc(q)}</span></div>${r.preview?`<p>${esc(r.preview)}</p>`:""}${act}</div>`}).join("");
+  if(html===A.last) return; A.last = html; $("approvals").innerHTML = html;
+  if(A.focus){ const el=document.querySelector('#approvals [data-act="'+A.focus.act+'"][data-id="'+CSS.escape(A.focus.id)+'"]'+(A.focus.d?'[data-d="'+A.focus.d+'"]':"")); if(el) el.focus(); A.focus=null; }
+}
+async function decide(id, decision){
+  const A = state.apr, by = $("decidedBy").value.trim(), row = A.rows.find(r=>String(r.id)===id), title = row ? row.title : id;
+  A.confirm = null; delete A.err[id]; A.pending = id; $("aprMsg").textContent = "Saving decision…"; drawApprovals();
+  try{
+    const r = await call("decide", {id, decision, decided_by:by});
+    if(!r || r.ok!==true) throw new Error("not confirmed");
+    A.rows = A.rows.filter(x=>String(x.id)!==id);   // remove only after ok:true
+    $("aprMsg").textContent = (decision==="approve"?"Approved: ":"Rejected: ")+title;
+  }catch(e){
+    A.err[id] = "Could not "+decision+" ("+(e.message||"error")+"). Nothing was changed here; check Notion before retrying.";
+    $("aprMsg").textContent = "";
+  }finally{ A.pending = null; drawApprovals(); }
+}
+$("decidedBy").value = store.get("jarvis.decidedBy") || "";
+$("decidedBy").addEventListener("input", ()=>{ store.set("jarvis.decidedBy", $("decidedBy").value.trim()); });
+$("approvals").addEventListener("click", e=>{
+  const b = e.target.closest && e.target.closest("button[data-act]"); if(!b || b.disabled) return;
+  const A = state.apr, id = b.dataset.id, act = b.dataset.act;
+  if(A.sample){ $("aprMsg").textContent = "sample data: cannot decide"; return; }
+  if(act==="ask"){
+    if(A.pending!==null) return;
+    delete A.err[id];
+    if(!$("decidedBy").value.trim()){ A.err[id] = "Enter your name in Decided by first."; A.last=null; drawApprovals(); $("decidedBy").focus(); return; }
+    A.confirm = {id, decision:b.dataset.d}; A.focus = {act:"confirm", id}; A.last=null; drawApprovals();
+  } else if(act==="cancel"){
+    const d = A.confirm && A.confirm.decision; A.confirm = null; A.focus = {act:"ask", id, d}; drawApprovals();
+  } else if(act==="confirm" && A.confirm && A.confirm.id===id){
+    decide(id, A.confirm.decision);
+  }
+});
+
+// ---- Weekly report ----
+function bar(label, n, max, errs){
+  const w = max>0 ? Math.max(0, n)/max*100 : 0, ew = max>0 && errs ? errs/max*100 : 0;
+  return `<div class="rbar"><span class="lbl">${esc(label)}</span><span class="trk" aria-hidden="true"><i style="width:${Math.max(0,w-ew)}%"></i>${ew?`<i class="e" style="width:${ew}%"></i>`:""}</span><span class="num">${esc(n)}${errs!==undefined?" / "+esc(errs)+" err":""}</span></div>`;
+}
+function renderReport(d, isSample){
+  const r = d && typeof d==="object" ? d : {}, tag = isSample ? ` <span class="samp-tag" id="repSample">SAMPLE</span>` : "";
+  const obj = o => (o && typeof o==="object") ? o : {}, num = v => Number(v)||0;
+  const agents = Object.entries(obj(r.runs_by_agent)), maxRuns = Math.max(1,...agents.map(([,v])=>num(obj(v).runs)));
+  const ap = obj(r.approvals), apKeys = ["created","approved","rejected","sent","awaiting"], apMax = Math.max(1,...apKeys.map(k=>num(ap[k])));
+  const qa = obj(r.qa), qaKeys = [["pass","Pass"],["fail","Fail"],["not_checked","Not checked"]], qaMax = Math.max(1,...qaKeys.map(([k])=>num(qa[k])));
+  const jobs = obj(r.jobs), js = Object.entries(obj(jobs.by_status)), jMax = Math.max(1,...js.map(([,v])=>num(v)));
+  $("reportView").innerHTML =
+   `<section class="panel wide"><h2>WEEKLY REPORT <i>${esc(r.week_start||"?")} to ${esc(r.week_end||"?")}${tag}</i></h2><div class="kpis"><div><b>${agents.reduce((a,[,v])=>a+num(obj(v).runs),0)}</b>agent runs</div><div><b>${agents.reduce((a,[,v])=>a+num(obj(v).errors),0)}</b>errors</div><div><b>${num(ap.awaiting)}</b>awaiting approval</div><div><b>${num(jobs.flagged)}</b>flagged jobs</div></div>${r.generated_at?`<div class="msg">generated ${esc(r.generated_at)}</div>`:""}</section>`+
+   `<section class="panel"><h2>RUNS BY AGENT <i>runs / errors</i></h2>${agents.length?`<table><thead><tr><th>Agent</th><th>Runs</th><th>Errors</th></tr></thead><tbody>${agents.map(([n,v])=>`<tr><td>${esc(n)}</td><td>${esc(num(obj(v).runs))}</td><td>${esc(num(obj(v).errors))}</td></tr>`).join("")}</tbody></table>`+agents.map(([n,v])=>bar(n,num(obj(v).runs),maxRuns,num(obj(v).errors))).join(""):`<div class="empty">No runs</div>`}</section>`+
+   `<section class="panel"><h2>APPROVALS</h2>${apKeys.map(k=>bar(k[0].toUpperCase()+k.slice(1),num(ap[k]),apMax)).join("")}</section>`+
+   `<section class="panel"><h2>QA</h2>${qaKeys.map(([k,l])=>bar(l,num(qa[k]),qaMax)).join("")}</section>`+
+   `<section class="panel"><h2>JOBS BY STATUS <i>${num(jobs.flagged)} flagged</i></h2>${js.length?js.map(([n,v])=>bar(n,num(v),jMax)).join(""):`<div class="empty">No jobs</div>`}</section>`;
+}
+// One of: null (dashboard), "report", "sales".
+function showView(v){
+  $("reportView").hidden = v!=="report"; $("salesView").hidden = v!=="sales"; document.querySelector(".main").hidden = !!v;
+  $("reportBtn").setAttribute("aria-pressed", String(v==="report")); $("reportBtn").textContent = v==="report" ? "Dashboard" : "Report";
+  $("salesBtn").setAttribute("aria-pressed", String(v==="sales")); $("salesBtn").textContent = v==="sales" ? "Dashboard" : "Sales";
+  if(v==="sales") refreshSales();
+}
+function setReportOpen(on){ showView(on ? "report" : null); }
+$("reportBtn").addEventListener("click", ()=> setReportOpen($("reportView").hidden));
+$("salesBtn").addEventListener("click", ()=> showView($("salesView").hidden ? "sales" : null));
+
+// ---- Etsy sales (TheLuminousFairy): read-only; nothing is sent from this view ----
+const SALES_STATUSES = ["New","Packed","Shipped","Delivered","Issue"];
+function money(v, cur){
+  const n = Number(v); if(!isFinite(n)) return "-";
+  if(cur && cur!=="MIXED"){ try{ return new Intl.NumberFormat(undefined,{style:"currency",currency:String(cur)}).format(n); }catch(e){} }
+  return n.toFixed(2);
+}
+function renderSales(d, isSample){
+  const obj = o => (o && typeof o==="object" && !Array.isArray(o)) ? o : {}, arr = a => Array.isArray(a) ? a : [];
+  const r = obj(d), t = obj(r.totals), bs = obj(r.by_status), cur = r.currency ? String(r.currency) : "";
+  const mixed = cur==="MIXED", m = v => money(v, cur), cnt = v => Number(v)||0;
+  const ship = arr(r.to_ship).slice().sort((a,b)=> (b&&b.overdue?1:0)-(a&&a.overdue?1:0));
+  const issues = Array.isArray(r.issues) ? r.issues.length : cnt(r.issues);
+  const tag = isSample ? ` <span class="samp-tag" id="salesSample">SAMPLE</span>` : "";
+  const tile = (l,v) => `<div class="tile">${l}<b>${esc(v)}</b></div>`;
+  const items = x => Array.isArray(x) ? x.join(", ") : x;
+  $("etsyCnt").innerHTML = esc(ship.length) + (isSample ? ` <small>sample</small>` : "");
+  $("etsyStat").title = "Etsy orders to ship" + (isSample ? " (sample data)" : "");
+  $("salesView").innerHTML =
+   `<section class="panel wide"><h2>ETSY SALES <i>TheLuminousFairy${tag}</i></h2><div class="tiles">`+
+     tile("Orders 7d",cnt(t.orders_7d))+tile("Revenue 7d",m(t.revenue_7d))+tile("Orders 30d",cnt(t.orders_30d))+tile("Revenue 30d",m(t.revenue_30d))+tile("Avg order 30d",m(t.avg_order_30d))+tile("Issues",issues)+
+   `</div>${mixed?`<div class="aprnote">Mixed currencies: amounts are raw numbers, not converted.</div>`:""}${r.generated_at?`<div class="msg">generated ${esc(r.generated_at)}</div>`:""}</section>`+
+   `<section class="panel wide"><h2>ORDER STATUS</h2><div class="sstrip" role="list">${SALES_STATUSES.map(k=>{ const n=cnt(bs[k]), bad=k==="Issue"&&n>0;
+     return `<div class="sst${bad?" bad":""}" role="listitem"><span>${esc(k)}</span><b>${n}</b>${bad?`<span class="pill bad">needs attention</span>`:""}</div>`; }).join("")}</div></section>`+
+   `<section class="panel"><h2>TO SHIP <i><span class="cnt">${ship.length}</span></i></h2>${ship.length?`<ul class="ship">${ship.map(o=>{ o=obj(o);
+     return `<li class="${o.overdue?"over":""}"><div><b>${esc(o.order)}</b> ${esc(o.buyer_first_name)}<span class="m">${esc(items(o.items))}</span></div><div style="text-align:right"><span class="pill${o.overdue?" bad":""}">${o.overdue?"Overdue":"On time"}</span><span class="m">ship by ${esc(o.ship_by)}</span></div></li>`; }).join("")}</ul>`:`<div class="empty">Nothing to ship</div>`}</section>`+
+   `<section class="panel"><h2>RECENT ORDERS</h2>${arr(r.recent).length?`<div class="tscroll"><table><thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Status</th></tr></thead><tbody>${arr(r.recent).map(o=>{ o=obj(o);
+     return `<tr><td>${esc(o.order)}</td><td>${esc(o.date)}</td><td>${esc(m(o.total))}</td><td>${esc(o.status)}</td></tr>`; }).join("")}</tbody></table></div>`:`<div class="empty">No recent orders</div>`}</section>`;
+}
+let salesBusy = false;
+async function refreshSales(){
+  if(salesBusy) return; salesBusy = true;
+  try{ let d, s = false; try{ d = await call("etsySales"); }catch(e){ d = SAMPLE.etsySales; s = true; } renderSales(d, s); }
+  finally{ salesBusy = false; }
+}
+
+function setWar(on){
+  state.war = on; if(typeof reduce!=="undefined" && reduce) requestAnimationFrame(frame); document.body.classList.toggle("war", on);
+  $("war").classList.toggle("on", on); $("war").setAttribute("aria-pressed", String(on)); $("warLabel").textContent = "War Mode: " + (on?"ON":"off");
+  $("core1").textContent = on?"WAR":"CORE"; $("core2").textContent = on?"MODE":"ACTIVE"; $("sysstat").textContent = on?"ALERT":"OPTIMAL";
+}
+
+async function refresh(){
+  const seq = state.warSeq;
+  const [p,a,r,w,lg] = await Promise.all([
+    load("pipeline",SAMPLE.pipeline), load("agents",SAMPLE.agents),
+    load("rules",SAMPLE.rules), load("warMode",null), load("log",SAMPLE.log)]);
+  let ap, aprSample = false, wr, wrSample = false;
+  try { ap = await call("approvals"); } catch(e){ ap = SAMPLE.approvals; aprSample = true; }
+  try { wr = await call("weeklyReport"); } catch(e){ wr = SAMPLE.weeklyReport; wrSample = true; }
+  renderApprovals(ap, aprSample); renderReport(wr, wrSample);
+  renderPipeline(p, !state.live.pipeline); renderAgents(a); renderRules(r); renderLog(lg);
+  if(w && typeof w.enabled==="boolean"){ if(!state.pending && seq===state.warSeq){ state.warKnown=true; setWar(w.enabled); } }
+  else if(!state.warKnown){ $("warLabel").textContent="War Mode: unknown"; $("war").removeAttribute("aria-pressed"); }
+  $("war").disabled = !state.warKnown || state.pending;
+  markSample();
+  if(!$("salesView").hidden) refreshSales();
+}
+
+$("war").addEventListener("click", async ()=>{
+  if(state.pending || !state.warKnown) return;
+  const want = !state.war; state.pending = true; state.warSeq++; $("war").disabled = true; setWar(want);
+  try { const r = await call("setWarMode", {enabled:want}); if(r && typeof r.enabled==="boolean") setWar(r.enabled); }
+  catch(err){ setWar(!want); log("jv","Could not save War Mode (n8n unreachable) — reverted. Check the real state before retrying."); }
+  finally { state.pending = false; state.warSeq++; $("war").disabled = false; }
+});
+
+function log(who, text){
+  const d = document.createElement("div"); d.className=who; d.textContent=(who==="me"?"You: ":"Jarvis: ")+text;
+  $("chatlog").appendChild(d); $("chatlog").scrollTop = 1e9;
+}
+$("chatform").addEventListener("submit", async e=>{
+  e.preventDefault(); const q = $("chatin").value.trim(); if(!q) return;
+  $("chatin").value=""; log("me",q);
+  try { const r = await call("chat",{message:q}, C.CHAT_TIMEOUT_MS); log("jv", r.reply || JSON.stringify(r)); }
+  catch(err){ log("jv","No reply received (n8n unreachable or slow). The message may still have been processed, so check before resending."); }
+});
+
+// ---- Sea background: layered shoreline waves; storm + foam in War Mode ----
+const cv = $("sea"), g = cv.getContext("2d"); let W,H,foam=[],t=0,storm=0;
+function size(){ W=cv.width=innerWidth; H=cv.height=innerHeight; } addEventListener("resize",()=>{size(); if(reduce) frame();}); size();
+var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function frame(){
+  t += reduce ? 0 : 0.012; storm = reduce ? (state.war?1:0) : storm + ((state.war?1:0)-storm)*0.03;
+  g.clearRect(0,0,W,H);
+  const layers = 5;
+  for(let l=0;l<layers;l++){
+    const base = H*(0.72+l*0.045), amp = (10+l*5)*(1+storm*1.8), sp = (1+l*0.35)*(1+storm);
+    const r = Math.round(20+l*8 + storm*(30-l*4)), gr = Math.round(70+l*14 - storm*50), b = Math.round(100+l*14 - storm*55);
+    g.beginPath(); g.moveTo(0,H);
+    for(let x=0;x<=W;x+=8) g.lineTo(x, base + Math.sin(x*0.008+t*sp+l)*amp + Math.sin(x*0.02-t*sp*1.3)*amp*0.35);
+    g.lineTo(W,H); g.closePath(); g.fillStyle=`rgba(${r},${gr},${b},${0.22+l*0.07})`; g.fill();
+  }
+  if(storm>0.3 && !reduce){
+    if(foam.length<140 && Math.random()<0.9) foam.push({x:Math.random()*W,y:H*0.75+Math.random()*H*0.1,vx:(Math.random()-.5)*2,vy:-Math.random()*2.5-0.5,life:1});
+    foam = foam.filter(p=>p.life>0);
+    for(const p of foam){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life-=0.015;
+      g.fillStyle=`rgba(255,255,255,${Math.max(p.life,0)*storm})`; g.beginPath(); g.arc(p.x,p.y,1.5+p.life*1.5,0,6.3); g.fill(); }
+  }
+  if(!reduce) requestAnimationFrame(frame);
+}
+frame();
+
+$("wave").innerHTML = Array.from({length:14},(_,i)=>`<i style="animation-delay:${(i*0.09).toFixed(2)}s;height:${8+(i*7)%22}px"></i>`).join("");
+setInterval(()=>{ $("clock").textContent = new Date().toLocaleTimeString([], {hour12:false}); },1000);
+refresh(); refreshSales(); setInterval(()=>{ if(!document.hidden) refresh(); }, C.POLL_MS);
+</script>
+</body>
+</html>

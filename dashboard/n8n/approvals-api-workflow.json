@@ -1,0 +1,116 @@
+{
+ "name": "Jarvis Approvals API",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "GET",
+    "path": "jarvis/approvals",
+    "responseMode": "responseNode",
+    "options": {
+     "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+    }
+   },
+   "name": "Approvals GET",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "jarvis-approvalsget"
+  },
+  {
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "a807f4c25dfe4ce388626726b7d99f6d",
+     "mode": "id"
+    },
+    "returnAll": true,
+    "options": {},
+    "simple": false
+   },
+   "name": "Notion Approvals",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    0
+   ],
+   "alwaysOutputData": true,
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const text = v => !v ? \"\" : v.title ? v.title.map(t=>t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t=>t.plain_text).join(\"\") : v.select ? (v.select.name||\"\") : \"\";\nconst out = [];\nfor (const it of $input.all().filter(i => i.json && i.json.id)) {\n  const p = it.json, pr = p.properties || {};\n  const get = re => { for (const k in pr) if (re.test(k)) return pr[k]; return null; };\n  if (text(get(/^status$/i)) !== \"Awaiting Approval\") continue;\n  let title = \"\";\n  for (const k in pr) if (pr[k].type === \"title\") title = text(pr[k]);\n  const draft = text(get(/^draft$/i)).replace(/\\[estimate-json\\][\\s\\S]*?\\[\\/estimate-json\\]/gi, \"\").replace(/\\[estimate-json\\][\\s\\S]*$/gi, \"\").replace(/\\s+/g, \" \").trim();\n  out.push({ id: p.id, title: title || \"(untitled)\", agent: text(get(/^agent$/i)), type: text(get(/^type$/i)),\n    qa: text(get(/^qa result$/i)) || \"Not checked\", related_job: text(get(/^related job$/i)),\n    created: p.created_time || \"\", preview: draft.slice(0, 160) });\n}\nout.sort((a, b) => String(a.created).localeCompare(String(b.created)));\nreturn [{ json: { body: out.slice(0, 25) } }];"
+   },
+   "name": "Shape Approvals",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "name": "Respond Approvals",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    0
+   ]
+  }
+ ],
+ "connections": {
+  "Approvals GET": {
+   "main": [
+    [
+     {
+      "node": "Notion Approvals",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Approvals": {
+   "main": [
+    [
+     {
+      "node": "Shape Approvals",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape Approvals": {
+   "main": [
+    [
+     {
+      "node": "Respond Approvals",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ }
+}
