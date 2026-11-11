@@ -11,8 +11,10 @@ const PORT = 8791;
 const ROOT = path.resolve(__dirname, '../../dashboard');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const CORS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': '*',
+  // Credentialed fetches (Cloudflare Access cookie) need a specific origin, not '*'.
+  'access-control-allow-origin': `http://127.0.0.1:${PORT}`,
+  'access-control-allow-credentials': 'true',
+  'access-control-allow-headers': 'content-type',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
 };
 
