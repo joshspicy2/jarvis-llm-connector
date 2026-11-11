@@ -33,3 +33,17 @@ app = Starlette(routes=[
     Route("/v1beta/models/{model}:generateContent", gemini, methods=["POST"]),
     Route("/_received", dump),
 ])
+
+
+async def freellm(request: Request):
+    body = await request.json()
+    received.append({"api": "freellm", "auth": request.headers.get("authorization"), "body": body})
+    if request.headers.get("authorization") != "Bearer freellmapi-test":
+        return JSONResponse({"error": {"message": "bad key"}}, status_code=401)
+    return JSONResponse(
+        {"choices": [{"message": {"role": "assistant", "content": f"Free says: {body['messages'][-1]['content']}"}}]},
+        headers={"x-routed-via": "groq/llama-test"},
+    )
+
+
+app.add_route("/v1/chat/completions", freellm, methods=["POST"])

@@ -46,6 +46,8 @@ def servers():
         PORT=str(srv_port),
         CONNECTOR_SECRET=SECRET,
         GEMINI_API_KEY="test-gemini-key",
+        FREELLMAPI_BASE_URL=f"http://127.0.0.1:{mock_port}/v1",
+        FREELLMAPI_API_KEY="freellmapi-test",
         GEMINI_BASE_URL=f"http://127.0.0.1:{mock_port}/v1beta",
         ALLOWED_HOSTS=f"127.0.0.1:{srv_port}",
     )
@@ -65,7 +67,7 @@ async def call(base: str, tool: str, args: dict):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {t.name for t in (await session.list_tools()).tools}
-            assert tools == {"gemini_research", "gemini_ask", "second_opinion"}
+            assert tools == {"gemini_research", "gemini_ask", "second_opinion", "free_llm_ask"}
             result = await session.call_tool(tool, args)
             return "".join(c.text for c in result.content if c.type == "text")
 
@@ -111,3 +113,10 @@ def test_wrong_or_missing_secret_is_404(servers):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_free_llm_ask(servers):
+    base, mock = servers
+    text = await call(base, "free_llm_ask", {"prompt": "name three cleaning tips"})
+    assert "Free says: name three cleaning tips" in text and "groq/llama-test" in text
