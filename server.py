@@ -4,6 +4,8 @@ Tools:
   gemini_research  - research a question with Gemini, grounded in Google Search
   gemini_ask       - ask Gemini anything without web search (coding help, quick answers)
   second_opinion   - have Gemini fact-check / critique a report Claude wrote
+  free_llm_ask     - OPT-IN: ask a self-hosted FreeLLMAPI router (many free providers). Only
+                     registered when FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY are both set.
 
 Configuration comes only from environment variables (see .env.example).
 """
@@ -13,6 +15,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+from urllib.parse import urlparse
 
 import httpx
 from starlette.responses import JSONResponse, PlainTextResponse
@@ -26,6 +29,10 @@ GEMINI_BASE_URL = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "180"))
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8000"))
+
+FREELLMAPI_BASE_URL = os.environ.get("FREELLMAPI_BASE_URL", "").rstrip("/")
+FREELLMAPI_MODEL = os.environ.get("FREELLMAPI_MODEL", "auto")
+_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 SECOND_OPINION_INSTRUCTIONS = (
     "You are reviewing a report written by another AI assistant (Claude). "
@@ -88,6 +95,41 @@ async def call_gemini(prompt: str, model: str, use_search: bool, system: str | N
     if sources:
         text += "\n\nSources:\n" + "\n".join(dict.fromkeys(sources))
     return text or "(Gemini returned an empty answer.)"
+
+
+def freellmapi_enabled() -> bool:
+    return bool(FREELLMAPI_BASE_URL and os.environ.get("FREELLMAPI_API_KEY"))
+
+
+def _check_freellmapi_url(url: str) -> None:
+    """The router holds our provider keys and has no multi-tenant auth: plain http only on loopback."""
+    u = urlparse(url)
+    if u.scheme == "https" or (u.scheme == "http" and u.hostname in _LOOPBACK):
+        return
+    raise UpstreamError("FREELLMAPI_BASE_URL must be https, or http on localhost/127.0.0.1.")
+
+
+async def call_freellmapi(prompt: str, model: str, system: str | None) -> str:
+    key = _require_env("FREELLMAPI_API_KEY")
+    if not FREELLMAPI_BASE_URL:
+        raise UpstreamError("FREELLMAPI_BASE_URL is not set on the connector server.")
+    _check_freellmapi_url(FREELLMAPI_BASE_URL)
+    messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+    body = {"model": model, "messages": messages, "max_tokens": MAX_OUTPUT_TOKENS}
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        resp = await client.post(
+            f"{FREELLMAPI_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=body,
+        )
+    if resp.status_code >= 400:
+        raise UpstreamError(f"FreeLLMAPI returned HTTP {resp.status_code}: {resp.text[:1000]}")
+    choices = resp.json().get("choices") or []
+    text = ((choices[0].get("message") or {}).get("content") or "").strip() if choices else ""
+    if not text:
+        raise UpstreamError("FreeLLMAPI returned no answer.")
+    routed = resp.headers.get("x-routed-via")
+    return text + (f"\n\n(Answered by free provider: {routed})" if routed else "")
 
 
 mcp = MCPServer(
@@ -160,6 +202,26 @@ async def second_opinion(report: str, focus: str | None = None, model: str | Non
         return await call_gemini(prompt, model or GEMINI_MODEL, True, SECOND_OPINION_INSTRUCTIONS)
     except (UpstreamError, httpx.HTTPError) as e:
         return f"Error calling Gemini: {e}"
+
+
+if freellmapi_enabled():
+
+    @mcp.tool()
+    async def free_llm_ask(prompt: str, model: str | None = None, system: str | None = None) -> str:
+        """Ask a free-tier LLM via the self-hosted FreeLLMAPI router (rotates across free providers).
+
+        Use for drafts, brainstorming, summaries and code help. Quality and availability vary by
+        the hour. Free-tier providers may log or train on prompts, so NEVER include client names,
+        addresses, phone numbers, emails, prices from Notion, or any credentials.
+        Args:
+            prompt: The question or task, with any non-sensitive context included.
+            model: "auto" (default), "auto:fast", "auto:smart", or a specific model id.
+            system: Optional system instruction to steer tone or format.
+        """
+        try:
+            return await call_freellmapi(prompt, model or FREELLMAPI_MODEL, system)
+        except (UpstreamError, httpx.HTTPError) as e:
+            return f"Error calling FreeLLMAPI: {e}"
 
 
 class SecretPathGuard:

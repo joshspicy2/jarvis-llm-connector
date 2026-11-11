@@ -8,6 +8,8 @@ A small remote MCP server that lets Claude (claude.ai, Claude Code, Cowork) call
 | `gemini_ask(prompt, model?, system?)` | Ask Gemini anything without web search, such as coding help. |
 | `second_opinion(report, focus?, model?)` | Have Gemini (with Google Search) fact-check a report, plan, or code Claude wrote. Ends with a verdict: AGREE, AGREE WITH CHANGES, or DISAGREE. |
 
+An optional fourth tool, `free_llm_ask`, reaches many free providers through a self-hosted [FreeLLMAPI](docs/FREELLMAPI.md) router. It is off by default; read that page (license, key handling, provider terms, privacy rules) before enabling it.
+
 The API key is read from an environment variable only. Nothing secret lives in this repo.
 
 ## What you need
@@ -105,6 +107,8 @@ To rotate a key or the secret, edit `/etc/jarvis-llm/env`, run `sudo systemctl r
 | `ALLOWED_HOSTS` | none | Public hostname(s), comma separated. Enables DNS-rebinding protection. |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Default Gemini model; any call can override it. |
 | `HOST` / `PORT` | `127.0.0.1` / `8787` | Keep it on localhost; Caddy handles the public side. |
+| `FREELLMAPI_BASE_URL` / `FREELLMAPI_API_KEY` | none | Optional. Both set enables `free_llm_ask`. See [docs/FREELLMAPI.md](docs/FREELLMAPI.md). |
+| `FREELLMAPI_MODEL` | `auto` | Default router model for `free_llm_ask`. |
 | `REQUEST_TIMEOUT_SECONDS` | `180` | Per upstream call. |
 | `MAX_OUTPUT_TOKENS` | `8000` | Caps each answer to control cost. |
 
