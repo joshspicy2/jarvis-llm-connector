@@ -22,6 +22,8 @@ Nothing from FreeLLMAPI is copied into this repo. The tool is **off unless both 
 
 ## Setup on the Oracle VM (needs Joshua; do not run before he agrees)
 
+`deploy/install-freellmapi.sh` automates steps 1 and 3 below (`install`, `enable`, `disable`). Step 2 stays manual.
+
 1. Install Docker if missing, then follow FreeLLMAPI's [install guide](https://github.com/tashfeenahmed/freellmapi/blob/main/docs/en/install/01-install.md)
    (Docker Compose). Do not set `HOST_BIND`; leave it on 127.0.0.1:3001. Do not enable the `autoupdate` profile.
 2. Over an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 ubuntu@<vm>`) open http://localhost:3001, create the account, and on **Keys**
