@@ -1,0 +1,616 @@
+{
+  "name": "Jarvis Etsy Draft Listing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis/etsy/draft-listing",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://REPLACE_WITH_DASHBOARD_ORIGIN"
+        },
+        "authentication": "headerAuth"
+      },
+      "name": "Etsy Draft Listing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "jarvis-etsy-draft-listing",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Select your Header Auth credential (Jarvis Etsy Secret)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate a draft-listing request. Draft only: state is forced to draft, nothing is ever published.\nconst body = ($input.first().json.body) || {};\nconst clean = (s, max) => String(s == null ? \"\" : s).replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g, \"\").trim().slice(0, max);\nconst err = (status, error) => [{ json: { valid: false, status, error } }];\nconst title = clean(body.title, 140);\nconst description = clean(body.description, 20000);\nconst price = Number(body.price);\nconst quantity = Math.floor(Number(body.quantity == null ? 999 : body.quantity));\nconst taxonomy_id = Math.floor(Number(body.taxonomy_id));\nconst tags = Array.isArray(body.tags) ? body.tags.map(t => clean(t, 20).toLowerCase()).filter(Boolean) : [];\nconst httpsOnly = u => /^https:\\/\\/[^\\s]+$/.test(String(u || \"\"));\nconst files = Array.isArray(body.files) ? body.files : [];\nconst images = Array.isArray(body.images) ? body.images : [];\nif (!title) return err(400, \"title required (max 140 chars)\");\nif (!description) return err(400, \"description required\");\nif (!(price > 0 && price < 10000)) return err(400, \"price must be a number between 0 and 10000\");\nif (!(quantity >= 1 && quantity <= 999)) return err(400, \"quantity must be 1 to 999\");\nif (!(taxonomy_id > 0)) return err(400, \"taxonomy_id required (Etsy category id)\");\nif (tags.length > 13) return err(400, \"max 13 tags\");\nif (new Set(tags).size !== tags.length) return err(400, \"duplicate tags\");\nif (files.length > 5) return err(400, \"max 5 digital files\");\nif (images.length > 20) return err(400, \"max 20 images\");\nif (!files.every(f => f && httpsOnly(f.url)) || !images.every(i => i && httpsOnly(i.url))) return err(400, \"every file/image needs an https url\");\nconst etsy = {\n  title, description, price: price.toFixed(2), quantity, taxonomy_id,\n  who_made: \"i_did\", when_made: \"2020_2026\", is_supply: \"false\",\n  type: \"download\", state: \"draft\",\n  tags: tags.join(\",\")\n};\nconst uploads = [];\nimages.forEach((i, idx) => uploads.push({ kind: \"image\", url: String(i.url), name: clean(i.name || (\"image-\" + (idx + 1) + \".jpg\"), 100), rank: idx + 1 }));\nfiles.forEach((f, idx) => uploads.push({ kind: \"file\", url: String(f.url), name: clean(f.name || (\"file-\" + (idx + 1) + \".pdf\"), 100), rank: idx + 1 }));\nreturn [{ json: { valid: true, etsy, uploads, title } }];"
+      },
+      "name": "Validate Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Draft valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "name": "Respond Bad Draft",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openapi.etsy.com/v3/application/shops/REPLACE_WITH_ETSY_SHOP_ID/listings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "REPLACE_WITH_ETSY_KEYSTRING_COLON_SHARED_SECRET"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.etsy) }}",
+        "options": {}
+      },
+      "name": "Create Draft Listing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -100
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "",
+          "name": "Select your Etsy OAuth2 credential (listings_r listings_w)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan out one item per image/file for the listing that was just created as a draft.\nconst v = $('Validate Draft').first().json;\nconst created = $('Create Draft Listing').first().json || {};\nconst listing_id = created.listing_id;\nif (!listing_id) return [{ json: { listing_id: null, kind: \"none\" } }];\nif (!v.uploads.length) return [{ json: { listing_id, kind: \"none\" } }];\nreturn v.uploads.map(u => ({ json: Object.assign({ listing_id }, u) }));"
+      },
+      "name": "Prep Uploads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "u1",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "image",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Is image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "u2",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "file",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Is file?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "name": "Fetch Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "name": "Fetch File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://openapi.etsy.com/v3/application/shops/REPLACE_WITH_ETSY_SHOP_ID/listings/{{ $('Prep Uploads').item.json.listing_id }}/images",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "REPLACE_WITH_ETSY_KEYSTRING_COLON_SHARED_SECRET"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "image",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "rank",
+              "value": "={{ $('Prep Uploads').item.json.rank }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Upload Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -200
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "",
+          "name": "Select your Etsy OAuth2 credential (listings_r listings_w)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://openapi.etsy.com/v3/application/shops/REPLACE_WITH_ETSY_SHOP_ID/listings/{{ $('Prep Uploads').item.json.listing_id }}/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "REPLACE_WITH_ETSY_KEYSTRING_COLON_SHARED_SECRET"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "name",
+              "value": "={{ $('Prep Uploads').item.json.name }}"
+            },
+            {
+              "name": "rank",
+              "value": "={{ $('Prep Uploads').item.json.rank }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Upload File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "",
+          "name": "Select your Etsy OAuth2 credential (listings_r listings_w)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "name": "Merge Uploads",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1760,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summarize. Draft only: the listing stays inactive until a human publishes it in Etsy.\nconst v = $('Validate Draft').first().json;\nconst created = $('Create Draft Listing').first().json || {};\nconst listing_id = created.listing_id || null;\nlet ok_i = 0, ok_f = 0, failed = 0;\nfor (const it of $input.all()) {\n  const j = it.json || {};\n  if (j.error || j.errors) { failed++; continue; }\n  if (j.listing_image_id) ok_i++; else if (j.listing_file_id) ok_f++;\n}\nconst wanted = v.uploads.length;\nfailed = Math.max(failed, wanted - ok_i - ok_f);\nconst base = \"/your/shops/me/listing-editor/edit/\";\nreturn [{ json: { body: { ok: !!listing_id, state: \"draft\", listing_id, title: v.title, uploads: { images: ok_i, files: ok_f, failed }, edit_path: listing_id ? base + listing_id : null, note: \"Draft only. A human reviews and publishes it in Etsy.\" } } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "name": "Collect Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "5b18e20e5aba4be787a1eaedf2217da3",
+          "mode": "id"
+        },
+        "title": "={{ 'Etsy draft listing: ' + $json.body.title }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Task|title",
+              "title": "={{ 'Etsy draft listing: ' + $json.body.title }}"
+            },
+            {
+              "key": "Agent|select",
+              "selectValue": "Etsy"
+            },
+            {
+              "key": "Status|select",
+              "selectValue": "Done"
+            },
+            {
+              "key": "Output Notes|rich_text",
+              "text": "={{ JSON.stringify({ event: 'draft_listing_created', listing_id: $json.body.listing_id, uploads: $json.body.uploads }) }}"
+            },
+            {
+              "key": "Timestamp|date",
+              "includeTime": true,
+              "date": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Log Draft Run",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        0
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "",
+          "name": "Select your Notion credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Collect Results').first().json.body) }}",
+        "options": {}
+      },
+      "name": "Respond Draft",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Etsy Draft Listing Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Draft": {
+      "main": [
+        [
+          {
+            "node": "Draft valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft valid?": {
+      "main": [
+        [
+          {
+            "node": "Create Draft Listing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Bad Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Draft Listing": {
+      "main": [
+        [
+          {
+            "node": "Prep Uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Uploads": {
+      "main": [
+        [
+          {
+            "node": "Is image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is image?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is file?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is file?": {
+      "main": [
+        [
+          {
+            "node": "Fetch File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Uploads",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Image": {
+      "main": [
+        [
+          {
+            "node": "Upload Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch File": {
+      "main": [
+        [
+          {
+            "node": "Upload File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Image": {
+      "main": [
+        [
+          {
+            "node": "Merge Uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload File": {
+      "main": [
+        [
+          {
+            "node": "Merge Uploads",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Uploads": {
+      "main": [
+        [
+          {
+            "node": "Collect Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Results": {
+      "main": [
+        [
+          {
+            "node": "Log Draft Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Draft Run": {
+      "main": [
+        [
+          {
+            "node": "Respond Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
