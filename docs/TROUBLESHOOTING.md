@@ -133,8 +133,8 @@ All Anthropic calls are HTTP Request nodes to `https://api.anthropic.com/v1/mess
   - Router: IMPORTANT / Conductor / `needs_human: true`, `llm_failed: true`, Activity Log Status `Error`.
   - Conductor: writes a plain non-LLM brief.
   - Support/Marketer: no Approvals row, Activity Log row with Status `Error`, HTTP 502 `{status:'error', needs_human:true, reason}`.
-- Chat (`Anthropic Chat`): `onError: continueRegularOutput` but **no retry** configured; a failure returns
-  `{"reply":"I could not reach the language model right now."}`.
+- Chat: Gemini (`Gemini Chat`) is the default; heavy/coding/PII-looking messages go to `Anthropic Chat`, and a Gemini error
+  falls back to Anthropic. No retry. If both fail, the reply names the provider and error detail (see dashboard/n8n/CHAT.md).
 - Intake does not retry: a failed Router or downstream call logs Status `Error` and returns 502 `{error, stage}`.
 - A 4xx from Anthropic (401 bad key, 400 invalid request, model name not available to your key) is retried 3 times
   and then swallowed into the fallback, so the workflow looks "fine" but always falls back. Read the Anthropic
