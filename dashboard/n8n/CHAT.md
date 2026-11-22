@@ -29,6 +29,9 @@ Context given to the model (all limiting is done in Build Chat Prompt):
 - Last 10 Activity Log rows, newest first by Timestamp.
 All Notion nodes use `simple: false` and run once. The staff message is passed as untrusted text.
 
+## Social draft command
+A message like `/post facebook <topic>` or `/post instagram <topic>` skips the LLM and POSTs to the Marketer webhook (`Draft social post`; set `REPLACE_WITH_N8N_BASE`). Reply: the draft is queued as Awaiting Approval, nothing is posted. See `SOCIAL-PUBLISHER.md`.
+
 ## Setup
 - Select the Notion credential on the 3 chat Notion nodes.
 - Get a free Gemini key at https://aistudio.google.com/apikey (Create API key). In n8n: Credentials > New > Header Auth, Name `Gemini API key`, Header Name `x-goog-api-key`, Value = the key. Select it on `Gemini Chat`.

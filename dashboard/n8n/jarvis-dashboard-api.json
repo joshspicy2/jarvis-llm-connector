@@ -677,7 +677,7 @@
        "id": "sp1",
        "name": "systemPrompt",
        "type": "string",
-       "value": "You are Jarvis, the operations assistant for High Tide Wash, a family interior cleaning business. You talk with staff (Joshua, Makenzie). You can only talk about the operations status provided in the context message. Never invent facts, prices or schedules; if the context does not contain the answer, say you do not have it. You cannot send anything to clients. For any action request, say which agent or workflow would handle it (Router, Estimator, Support, Marketer, Conductor, Shield/Ops, QA) and that drafts need staff approval. Keep answers short and plain."
+       "value": "You are Jarvis, the operations assistant for High Tide Wash, a family interior cleaning business. You talk with staff (Joshua, Makenzie). You can only talk about the operations status provided in the context message. Never invent facts, prices or schedules; if the context does not contain the answer, say you do not have it. You cannot send anything to clients. For any action request, say which agent or workflow would handle it (Router, Estimator, Support, Marketer, Conductor, Shield/Ops, QA) and that drafts need staff approval. Staff can queue a social draft by typing '/post facebook <topic>' or '/post instagram <topic>'; nothing is posted until a human approves it in Approvals. Keep answers short and plain."
       }
      ]
     },
@@ -822,6 +822,70 @@
      "name": "Select your Gemini API key credential"
     }
    }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "s1",
+       "leftValue": "={{ /^\\/(post|draft)\\s+(facebook|instagram)\\s+\\S/i.test($json.message) }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "Social draft command?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    550,
+    1000
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://REPLACE_WITH_N8N_BASE/webhook/jarvis/marketing",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ channel: $json.message.trim().split(/\\s+/)[1].toLowerCase(), topic: $json.message.trim().replace(/^\\S+\\s+\\S+\\s+/, '').slice(0, 300) }) }}",
+    "options": {
+     "timeout": 60000
+    }
+   },
+   "name": "Draft social post",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    770,
+    1000
+   ],
+   "onError": "continueRegularOutput",
+   "notes": "Calls the Marketer webhook. Nothing is posted: the draft lands in Approvals as Awaiting Approval."
+  },
+  {
+   "parameters": {
+    "jsCode": "// Reply for '/post <facebook|instagram> <topic>'. Nothing is posted; a human approves in Approvals.\nconst j = $input.first() ? ($input.first().json || {}) : {};\nconst ok = j.status === 'drafted' && j.approval_id;\nconst reply = ok\n  ? 'Draft created and queued in Approvals as Awaiting Approval. Nothing is posted until you or Makenzie approve it. Approval id: ' + j.approval_id\n  : 'I could not create the draft' + (j.reason ? ': ' + String(j.reason).slice(0, 200) : (Array.isArray(j.errors) ? ': ' + j.errors.join('; ').slice(0, 200) : ' (the Marketer webhook is off or unreachable).'));\nreturn [{ json: { body: { reply, provider: 'marketer', ok: !!ok } } }];\n"
+   },
+   "name": "Shape social reply",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    990,
+    1000
+   ]
   }
  ],
  "connections": {
@@ -1071,7 +1135,7 @@
    "main": [
     [
      {
-      "node": "Notion Pipeline (chat)",
+      "node": "Social draft command?",
       "type": "main",
       "index": 0
      }
@@ -1203,6 +1267,46 @@
     [
      {
       "node": "Anthropic Chat",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Social draft command?": {
+   "main": [
+    [
+     {
+      "node": "Draft social post",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Notion Pipeline (chat)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Draft social post": {
+   "main": [
+    [
+     {
+      "node": "Shape social reply",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape social reply": {
+   "main": [
+    [
+     {
+      "node": "Respond Chat",
       "type": "main",
       "index": 0
      }
