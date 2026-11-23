@@ -11,13 +11,17 @@ It never sends anything to clients and never invents prices, facts or schedules.
 - Request: `{ "message": "<non-empty string, max 2000 chars>" }`
 - Bad input: HTTP 400 `{ "error": "..." }` (no Notion or LLM calls are made).
 - Success: `{ "reply": "<text, truncated to 1500 chars>" }`
-- LLM call fails: `{ "reply": "I could not reach the language model right now." }`
+- LLM call fails: `{ "reply": "I could not reach the language model (<provider>: <detail>)...", "ok": false }` (the error detail is shown, not swallowed)
 
 ## Node flow
 Chat POST -> Validate Chat -> Chat Valid? (false: Respond Chat Bad Request)
 -> Notion Pipeline (chat) -> Notion Flags (chat) -> Notion Log (chat)
--> Build Chat Prompt (Code) -> Chat system prompt (Set) -> Anthropic Chat (HTTP)
+-> Build Chat Prompt (Code) -> Chat system prompt (Set) -> Pick Model (Code) -> Heavy or PII? (IF)
+   - light (default): Gemini Chat (HTTP, `gemini-2.5-flash`); if Gemini errors, falls back to Anthropic Chat
+   - heavy/coding, >600 chars, or email/phone in the message: Anthropic Chat (HTTP, `claude-sonnet-5-5`)
 -> Shape Chat Reply (Code) -> Respond Chat
+
+Privacy: the Gemini path gets only aggregate context (War Mode, job counts by status, agent/status of recent log rows), never job names, log task names or notes. Free-tier Gemini may use inputs for training, so keep client-facing text and customer PII on the Claude path. The Gemini model id is unverified against the live API; change it in `Gemini Chat` if Google renamed it.
 
 Context given to the model (all limiting is done in Build Chat Prompt):
 - Pipeline jobs whose Status is not Paid: name + status, capped at 30.
@@ -27,6 +31,7 @@ All Notion nodes use `simple: false` and run once. The staff message is passed a
 
 ## Setup
 - Select the Notion credential on the 3 chat Notion nodes.
-- Create an Anthropic credential and select it on `Anthropic Chat` (the placeholder is empty).
+- Get a free Gemini key at https://aistudio.google.com/apikey (Create API key). In n8n: Credentials > New > Header Auth, Name `Gemini API key`, Header Name `x-goog-api-key`, Value = the key. Select it on `Gemini Chat`.
+- Create an Anthropic credential and select it on `Anthropic Chat` (the placeholder is empty). It is only used for heavy requests and as the Gemini fallback.
 - Model `claude-sonnet-5-5`, `max_tokens` 500. `Anthropic Chat` uses continue-on-error so a failure yields the fallback reply.
 - Replace `https://REPLACE_WITH_DASHBOARD_ORIGIN` on the webhook as for the other endpoints.
