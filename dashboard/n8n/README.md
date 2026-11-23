@@ -42,6 +42,7 @@ Each has a sibling doc; import them all, then set the Notion/Anthropic credentia
 | `etsy-orders-workflow.json` | `ETSY-ORDERS.md` (Etsy sales and shipping-confirmation drafts; draft-only) |
 | `etsy-sales-workflow.json` | `ETSY-SALES.md` (read-only Etsy sales numbers for the dashboard) |
 | `etsy-draft-listing-workflow.json` | `ETSY-DRAFT-LISTING.md` (creates Etsy draft listings with photos and files; never publishes; needs Etsy write scope) |
+| `social-publisher-workflow.json` | `SOCIAL-PUBLISHER.md` (approval-gated Facebook/Instagram posting via Graph API; DRY_RUN, Graph nodes disabled) |
 
 ## Status
 - Agent status comes from each agent's latest Activity Log row (Thinking/Working = active, Error = error, otherwise idle). Old log names map to the new ones (Estimate→Estimator, Content→Marketer, Integrator→Conductor).

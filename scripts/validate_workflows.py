@@ -60,7 +60,7 @@ WORKFLOW_DOCS = {
 PLACEHOLDER_RE = re.compile(r"REPLACE_WITH_[A-Z0-9_]+")
 CREDENTIAL_NAME_OK = re.compile(r"^(select your .*|replace_with_.*)$", re.IGNORECASE)
 URL_RE = re.compile(r"(?i)\b(?:https?|wss?)://([^\s/\"'`)\\<>]+)")
-ALLOWED_HOSTS = {"ops.hightidewash.net", "api.anthropic.com", "api.notion.com", "openapi.etsy.com", "generativelanguage.googleapis.com"}
+ALLOWED_HOSTS = {"ops.hightidewash.net", "api.anthropic.com", "api.notion.com", "openapi.etsy.com", "generativelanguage.googleapis.com", "graph.facebook.com"}
 
 SECRET_KEY_MARKERS = ("password", "apikey")
 

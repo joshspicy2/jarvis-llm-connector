@@ -7,7 +7,8 @@ Webhook `POST /jarvis/marketing` -> validate -> Set `Marketer system prompt` -> 
 (`claude-sonnet-5-5`) -> parse defensively -> Approvals row -> Agent Activity Log -> `{status:'drafted', approval_id}`.
 
 ## Request body
-`{ "channel": "facebook|tiktok|email", "topic": "string (max 300)", "notes": "optional string" }`
+`{ "channel": "facebook|instagram|tiktok|email", "topic": "string (max 300)", "notes": "optional string", "image_url": "optional https URL (needed to post on instagram)" }`
+The Draft gets an `Image: <url>` line when `image_url` is given. Approved facebook/instagram drafts are published by `SOCIAL-PUBLISHER.md`; dashboard chat reaches this webhook with `/post facebook <topic>`.
 Bad input returns HTTP 400 `{status:'error', errors:[...]}`.
 
 ## Output
