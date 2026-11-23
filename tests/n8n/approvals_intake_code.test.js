@@ -455,8 +455,9 @@ describe('Dashboard API: Shape Chat Reply', () => {
     assert.equal(shapeR({ content: [{ type: 'tool_use', text: 'x' }, { type: 'text', text: 7 }, null, { type: 'text', text: 'ok' }] }), 'ok');
   });
   test('error bodies, empty content, missing content, blank text, no items -> fallback', () => {
-    for (const bad of [{ error: { message: 'x' } }, { content: [] }, {}, { content: 'str' }, { content: [{ type: 'text', text: '  ' }] }, { error: 'x', content: [{ type: 'text', text: 'ok' }] }, undefined]) {
-      assert.equal(shapeR(bad), FALLBACK, JSON.stringify(bad));
+    for (const bad of [{ error: { message: 'x' } }, { content: [] }, {}, { content: 'str' }, { content: [{ type: 'text', text: '  ' }] }, undefined]) {
+      // Errors are surfaced, not swallowed (see CHAT.md): the reply names the failure.
+      assert.ok(shapeR(bad).startsWith('I could not reach the language model'), JSON.stringify(bad));
     }
   });
   test('reply capped at 1500 chars', () => {
