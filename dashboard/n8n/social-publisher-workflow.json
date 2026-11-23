@@ -1,0 +1,625 @@
+{
+ "name": "Jarvis Social Publisher (FB/IG, SAFE BY DEFAULT, DRY_RUN)",
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "saveDataSuccessExecution": "none"
+ },
+ "nodes": [
+  {
+   "name": "Every 10 minutes",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 10
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "Notion Approved rows",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    0
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "getAll",
+    "databaseId": {
+     "__rl": true,
+     "value": "a807f4c25dfe4ce388626726b7d99f6d",
+     "mode": "id"
+    },
+    "returnAll": false,
+    "limit": 50,
+    "simple": false,
+    "filterType": "manual",
+    "matchType": "allFilters",
+    "filters": {
+     "conditions": [
+      {
+       "key": "Status|select",
+       "condition": "equals",
+       "selectValue": "Approved"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "name": "Select social posts",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Select social posts: re-validate every Approved row; writes nothing.\nconst DRY_RUN = true; // while true nothing is published and nothing is set to Sent\nconst CAP = 3;\nconst GRACE_MS = 5 * 60 * 1000;\nconst txt = v => !v ? \"\" : v.title ? v.title.map(t => t.plain_text).join(\"\") : v.rich_text ? v.rich_text.map(t => t.plain_text).join(\"\") : v.select ? (v.select.name || \"\") : \"\";\nconst prop = (pr, name) => { for (const k in pr) if (k.toLowerCase() === name) return pr[k]; return null; };\nconst parse = draft => {\n  const ch = (draft.match(/^Channel:\\s*(\\w+)/im) || [])[1] || \"\";\n  const headline = (draft.match(/^Headline:\\s*(.+)$/im) || [])[1] || \"\";\n  const body = (draft.match(/^Body:\\n([\\s\\S]*?)(?:\\n\\n(?:Image|Hashtags|Suggested timing|NEEDS HUMAN):|$)/im) || [])[1] || \"\";\n  const image = (draft.match(/^Image:\\s*(https:\\/\\/\\S+)/im) || [])[1] || \"\";\n  const tags = (draft.match(/^Hashtags:\\s*(.+)$/im) || [])[1] || \"\";\n  const needsHuman = /^NEEDS HUMAN:/im.test(draft);\n  return { channel: ch.toLowerCase(), headline: headline.trim(), body: body.trim(), image, tags: tags.trim(), needsHuman };\n};\nconst skipped = [], picked = [];\nfor (const it of $input.all()) {\n  const p = it.json;\n  if (!p || !p.id) continue;\n  const pr = p.properties || {};\n  let title = \"\";\n  for (const k in pr) if (pr[k] && pr[k].type === \"title\") title = txt(pr[k]);\n  const v = { id: p.id, title: title || \"(untitled)\", status: txt(prop(pr, \"status\")), type: txt(prop(pr, \"type\")),\n    qa: txt(prop(pr, \"qa result\")), by: txt(prop(pr, \"decided by\")), draft: txt(prop(pr, \"draft\")).trim(),\n    decided_at: ((prop(pr, \"decided at\") || {}).date || {}).start || \"\", edited: p.last_edited_time || \"\" };\n  const why = (() => {\n    if (v.status !== \"Approved\") return \"status is not Approved\";\n    if (v.type !== \"Content\") return \"type is not Content\";\n    if (!v.draft) return \"Draft is empty\";\n    if (v.qa === \"Fail\" && !v.by) return \"QA Fail without Decided By\";\n    if (!v.decided_at) return \"Decided At missing\";\n    const da = /T/.test(v.decided_at) ? Date.parse(v.decided_at) : Date.parse(v.decided_at) + 86400000;\n    if (Date.parse(v.edited) > da + GRACE_MS) return \"edited after approval; set back to Awaiting Approval and re-approve\";\n    return \"\";\n  })();\n  const m = parse(v.draft);\n  if (![\"facebook\", \"instagram\"].includes(m.channel)) continue; // not a social post; Send handles other Content\n  if (why) { skipped.push({ id: v.id, title: v.title, reason: why }); continue; }\n  if (m.needsHuman) { skipped.push({ id: v.id, title: v.title, reason: \"draft is flagged NEEDS HUMAN\" }); continue; }\n  if (!m.body) { skipped.push({ id: v.id, title: v.title, reason: \"no Body found in Draft\" }); continue; }\n  if (m.channel === \"instagram\" && !m.image) { skipped.push({ id: v.id, title: v.title, reason: \"Instagram needs an Image: https URL line\" }); continue; }\n  const message = [m.headline, m.body, m.tags].filter(Boolean).join(\"\\n\\n\").slice(0, m.channel === \"instagram\" ? 2200 : 5000);\n  picked.push({ id: v.id, title: v.title, channel: m.channel, message, image_url: m.image, decided_at: v.decided_at });\n}\npicked.sort((a, b) => String(a.decided_at).localeCompare(String(b.decided_at)));\nconst run = picked.slice(0, CAP);\nconst log = { kind: \"summary\", task: \"Social publisher run\" + (DRY_RUN ? \" (dry run)\" : \"\"), status: \"Done\",\n  notes: ((DRY_RUN ? \"DRY RUN: would publish \" : \"Publishing \") + run.length + \" post(s): \" + run.map(r => r.channel + \" - \" + r.title).join(\"; \") +\n    (skipped.length ? \". Skipped: \" + skipped.map(s => s.title + \" (\" + s.reason + \")\").join(\"; \") : \"\")).slice(0, 1900) };\nreturn [{ json: log }, ...run.map(r => ({ json: { kind: \"post\", action: DRY_RUN ? \"would_publish\" : \"publish\", ...r } }))];\n"
+   }
+  },
+  {
+   "name": "Is summary?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    660,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.kind === \"summary\" }}",
+       "value2": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "Log run",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    880,
+    -140
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ $json.task }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ $json.task }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Marketer"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "={{ $json.status }}"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ $json.notes }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "name": "Publish?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    880,
+    100
+   ],
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.kind === \"post\" && $json.action === \"publish\" }}",
+       "value2": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "Build Graph requests",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    100
+   ],
+   "parameters": {
+    "jsCode": "// Build Graph API requests. The Page token lives only in the n8n credential, never here.\nconst PAGE = \"REPLACE_WITH_FACEBOOK_PAGE_ID\", IG = \"REPLACE_WITH_INSTAGRAM_ACCOUNT_ID\", V = \"v21.0\";\nreturn $input.all().map(it => {\n  const j = it.json;\n  if (j.channel === \"facebook\") {\n    const withImg = !!j.image_url;\n    return { json: { ...j, fb_url: \"https://graph.facebook.com/\" + V + \"/\" + PAGE + (withImg ? \"/photos\" : \"/feed\"),\n      fb_body: withImg ? { url: j.image_url, caption: j.message, published: true } : { message: j.message } } };\n  }\n  return { json: { ...j, ig_create_url: \"https://graph.facebook.com/\" + V + \"/\" + IG + \"/media\",\n    ig_publish_url: \"https://graph.facebook.com/\" + V + \"/\" + IG + \"/media_publish\",\n    ig_create_body: { image_url: j.image_url, caption: j.message } } };\n});\n"
+   }
+  },
+  {
+   "name": "Facebook?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    1320,
+    100
+   ],
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.channel === \"facebook\" }}",
+       "value2": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "Publish Facebook",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1540,
+    0
+   ],
+   "disabled": true,
+   "onError": "continueRegularOutput",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Select your Meta Page token credential"
+    }
+   },
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $json.fb_url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.fb_body) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "notes": "DISABLED. Joshua enables after the Meta app and Page token credential exist (see SOCIAL-PUBLISHER.md)."
+  },
+  {
+   "name": "Create Instagram media",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1540,
+    200
+   ],
+   "disabled": true,
+   "onError": "continueRegularOutput",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Select your Meta Page token credential"
+    }
+   },
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $json.ig_create_url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.ig_create_body) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "notes": "DISABLED. Joshua enables after the Meta app and Page token credential exist (see SOCIAL-PUBLISHER.md)."
+  },
+  {
+   "name": "Publish Instagram media",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1760,
+    200
+   ],
+   "disabled": true,
+   "onError": "continueRegularOutput",
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Select your Meta Page token credential"
+    }
+   },
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $(\"Build Graph requests\").item.json.ig_publish_url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ creation_id: $json.id }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   },
+   "notes": "DISABLED. Joshua enables after the Meta app and Page token credential exist (see SOCIAL-PUBLISHER.md)."
+  },
+  {
+   "name": "Confirm publish result",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1980,
+    100
+   ],
+   "parameters": {
+    "jsCode": "// Published only if Graph returned a NEW id. A disabled/failed publisher passes the incoming item through, which still carries kind/channel.\nreturn $input.all().map(it => {\n  const src = $('Build Graph requests').item.json;\n  let created = \"\";\n  if (src.channel === \"instagram\") { try { created = String($('Create Instagram media').item.json.id || \"\"); } catch (e) { created = \"\"; } }\n  const j = it.json || {};\n  const ok = !!j.id && !j.error && j.kind === undefined && j.id !== src.id && (src.channel !== \"instagram\" || String(j.id) !== created);\n  return { json: { id: src.id, title: src.title, channel: src.channel, confirmed: ok, graph_id: ok ? String(j.id) : \"\" } };\n});\n"
+   }
+  },
+  {
+   "name": "Confirmed?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 1,
+   "position": [
+    2200,
+    100
+   ],
+   "parameters": {
+    "conditions": {
+     "boolean": [
+      {
+       "value1": "={{ $json.confirmed === true }}",
+       "value2": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "Mark Sent",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    2420,
+    40
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "update",
+    "pageId": {
+     "__rl": true,
+     "value": "={{ $json.id }}",
+     "mode": "id"
+    },
+    "simple": false,
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Status|select",
+       "selectValue": "Sent"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "name": "Log Published",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    2640,
+    40
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Published (' + $('Confirm publish result').item.json.channel + '): ' + $('Confirm publish result').item.json.title }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Published (' + $('Confirm publish result').item.json.channel + '): ' + $('Confirm publish result').item.json.title }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Marketer"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Done"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'Marked Sent after Graph returned id ' + $('Confirm publish result').item.json.graph_id + '. Page ' + $('Confirm publish result').item.json.id }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "name": "Log Publish Failed",
+   "type": "n8n-nodes-base.notion",
+   "typeVersion": 2.2,
+   "position": [
+    2420,
+    200
+   ],
+   "credentials": {
+    "notionApi": {
+     "id": "",
+     "name": "Select your Notion credential"
+    }
+   },
+   "parameters": {
+    "resource": "databasePage",
+    "operation": "create",
+    "databaseId": {
+     "__rl": true,
+     "value": "5b18e20e5aba4be787a1eaedf2217da3",
+     "mode": "id"
+    },
+    "title": "={{ 'Publish FAILED: ' + $json.title }}",
+    "propertiesUi": {
+     "propertyValues": [
+      {
+       "key": "Task|title",
+       "title": "={{ 'Publish FAILED: ' + $json.title }}"
+      },
+      {
+       "key": "Agent|select",
+       "selectValue": "Marketer"
+      },
+      {
+       "key": "Status|select",
+       "selectValue": "Error"
+      },
+      {
+       "key": "Output Notes|rich_text",
+       "text": "={{ 'Graph did not return an id; row left Approved. Check the credential and the Executions tab. Page ' + $json.id }}"
+      },
+      {
+       "key": "Timestamp|date",
+       "includeTime": true,
+       "date": "={{ $now.toISO() }}"
+      }
+     ]
+    },
+    "options": {}
+   }
+  }
+ ],
+ "connections": {
+  "Every 10 minutes": {
+   "main": [
+    [
+     {
+      "node": "Notion Approved rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Notion Approved rows": {
+   "main": [
+    [
+     {
+      "node": "Select social posts",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Select social posts": {
+   "main": [
+    [
+     {
+      "node": "Is summary?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Is summary?": {
+   "main": [
+    [
+     {
+      "node": "Log run",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Publish?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Publish?": {
+   "main": [
+    [
+     {
+      "node": "Build Graph requests",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "Build Graph requests": {
+   "main": [
+    [
+     {
+      "node": "Facebook?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Facebook?": {
+   "main": [
+    [
+     {
+      "node": "Publish Facebook",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Create Instagram media",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Publish Facebook": {
+   "main": [
+    [
+     {
+      "node": "Confirm publish result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create Instagram media": {
+   "main": [
+    [
+     {
+      "node": "Publish Instagram media",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Publish Instagram media": {
+   "main": [
+    [
+     {
+      "node": "Confirm publish result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Confirm publish result": {
+   "main": [
+    [
+     {
+      "node": "Confirmed?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Confirmed?": {
+   "main": [
+    [
+     {
+      "node": "Mark Sent",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Log Publish Failed",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mark Sent": {
+   "main": [
+    [
+     {
+      "node": "Log Published",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ }
+}
