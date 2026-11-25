@@ -17,7 +17,7 @@ It never sends anything to clients and never invents prices, facts or schedules.
 Chat POST -> Validate Chat -> Chat Valid? (false: Respond Chat Bad Request)
 -> Notion Pipeline (chat) -> Notion Flags (chat) -> Notion Log (chat)
 -> Build Chat Prompt (Code) -> Chat system prompt (Set) -> Pick Model (Code) -> Heavy or PII? (IF)
-   - light (default): Gemini Chat (HTTP, `gemini-2.5-flash`); if Gemini errors, falls back to Anthropic Chat
+   - light (default): Gemini Chat (HTTP, `gemini-3.8-flash`); if Gemini errors, falls back to Anthropic Chat
    - heavy/coding, >600 chars, or email/phone in the message: Anthropic Chat (HTTP, `claude-sonnet-5-5`)
 -> Shape Chat Reply (Code) -> Respond Chat
 
